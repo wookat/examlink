@@ -170,7 +170,10 @@ async def do_capture(trigger="manual", ask=True, question=""):
         await broadcast({"t": "capture", "id": cid, "image": datauri, "w": w, "h": h,
                          "trigger": trigger, "ask": ask})
         if ask and ai_mode() == "proxy":
-            CURRENT_TASK = asyncio.create_task(run_ai(cid, [b64], question, new_conv=True))
+            if STATE["busy"]:
+                await broadcast({"t": "error", "msg": "AI 正在生成中，本次截图未送答", "id": cid})
+            else:
+                CURRENT_TASK = asyncio.create_task(run_ai(cid, [b64], question, new_conv=True))
     except Exception as e:
         STATE["last_error"] = str(e)
         await broadcast({"t": "error", "msg": f"截图失败: {e}"})
@@ -382,6 +385,9 @@ async def handle_msg(ws, msg):
         q = msg.get("q", "")
         if ai_mode() != "proxy":
             await ws.send_text(json.dumps({"t": "error", "msg": "当前为直连模式，请在本机浏览器中直接调用模型"}))
+            return
+        if STATE["busy"]:
+            await ws.send_text(json.dumps({"t": "error", "msg": "AI 正在生成中，请稍后再试"}))
             return
         cid = uuid.uuid4().hex[:10]
         STATE["busy"] = True

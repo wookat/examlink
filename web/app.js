@@ -141,6 +141,8 @@ function handle(m) {
     case "ask_ack": {
       const card = addCard({ id: m.id, image: null, trigger: "ask", tag: "追问" });
       card.el._text = "";
+      setCardText(m.id, "⏳ 思考中…", true);
+      $("#btnAbort").classList.remove("hidden");
       break;
     }
     case "cleared": $("#answers").innerHTML = ""; break;
@@ -161,7 +163,7 @@ function onCapture(m) {
     if (!m.ask) setCardText(m.id, "（仅截图，未请求 AI）", false);
     if (m.ask && aiMode === "proxy") {
       // server streams chunks into this card id
-      setCardText(m.id, "", true);
+      setCardText(m.id, "⏳ 思考中…", true);
       $("#btnAbort").classList.remove("hidden");
     }
   }
@@ -240,6 +242,7 @@ function directAsk({ images, q, newConv, trigger, image }) {
   const tag = trigger === "auto" ? "自动截图" : "AI答题";
   const card = addCard({ id, image: image || (images.length ? "data:image/jpeg;base64," + images[0] : null), trigger, tag });
   card.el._text = "";
+  setCardText(id, "⏳ 思考中…", true);
   $("#btnAbort").classList.remove("hidden");
   let lastFull = "";
   directChat({
