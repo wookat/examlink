@@ -19,7 +19,10 @@ const SCENES = {
   english: "你是英语考试助手。分析截图中的英语题目（阅读/完形/翻译/作文），给出答案和必要的解释。作文题给出参考范文。",
   fill: "你是笔试答题助手。分析截图中的题目，给出可直接填写的答案。如果是填空题给出填空内容，如果是简答题给出条理清晰的答案要点。",
 };
-const SCENE_LABELS = { general: "通用问答", mcq: "选择题", code: "编程题", english: "英语考试", fill: "填空简答" };
+const SCENE_LABELS = {
+  general: "通用问答", mcq: "选择题", code: "编程题", english: "英语考试", fill: "填空简答",
+  telecom_cs: "电信·计算机类", telecom_comm: "电信·通信类", carrier: "运营商·计算机类",
+};
 
 const PROVIDERS = {
   openai: { name: "OpenAI", base_url: "https://api.openai.com/v1", models: ["gpt-4o", "gpt-4o-mini", "gpt-5-mini"] },
@@ -606,6 +609,14 @@ function syncProxyUI(s) {
 function syncPromptUI(s) {
   $("#customPrompt").value = s.custom_prompt || "";
   $("#promptBadge").classList.toggle("hidden", !(s.custom_prompt || (s.scene_overrides || []).length));
+  if ($("#kbText") && document.activeElement !== $("#kbText")) {
+    $("#kbText").value = s.knowledge || "";
+    const kf = s.knowledge_file || {};
+    $("#kbFileInfo").textContent = kf.exists
+      ? `已加载 knowledge.md（${kf.chars} 字），与下方内容合并注入`
+      : "可在考试机创建 knowledge.md 存放更大知识库";
+    $("#kbBadge").classList.toggle("hidden", !(s.knowledge || kf.exists));
+  }
 }
 
 function refreshScenePrompt() {
@@ -739,6 +750,10 @@ $("#btnResetPrompt").onclick = () => {
   send({ t: "set", patch: { scenes: { [sid]: "" } } });
   toast("已恢复该场景默认提示词");
 };
+$("#btnSaveKb")?.addEventListener("click", () => {
+  send({ t: "set", patch: { knowledge: $("#kbText").value.trim() } });
+  toast("知识库已保存");
+});
 
 $("#btnSaveCfg").onclick = saveCfg;
 $("#btnClearChat").onclick = () => {

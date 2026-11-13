@@ -30,6 +30,7 @@ from fastapi.responses import FileResponse, JSONResponse, Response, StreamingRes
 
 BASE = Path(__file__).resolve().parent
 CONFIG_PATH = BASE / "config.json"
+KB_PATH = BASE / "knowledge.md"
 WEB = BASE / "web"
 
 app = FastAPI()
@@ -106,6 +107,24 @@ def effective_scenes():
     return {sid: (overrides.get(sid) or prompt) for sid, prompt in aimod.SCENES.items()}
 
 
+def load_kb():
+    """Effective knowledge base = knowledge.md file + inline config text."""
+    parts = []
+    try:
+        if KB_PATH.exists():
+            parts.append(KB_PATH.read_text(encoding="utf-8").strip())
+    except Exception:
+        pass
+    inline = (CFG.get("knowledge") or "").strip()
+    if inline:
+        parts.append(inline)
+    return "\n\n".join(parts)
+
+
+def resolve_system():
+    return aimod.with_kb(resolve_prompt(), load_kb())
+
+
 def public_state():
     pc = aimod.provider_cfg(CFG)
     mon = cap.monitors()[cap.effective_index(CFG.get("monitor"))]
@@ -121,6 +140,9 @@ def public_state():
         "scene": CFG.get("scene", "general"),
         "custom_prompt": CFG.get("custom_prompt", ""),
         "scene_overrides": [k for k, v in (CFG.get("scenes") or {}).items() if v],
+        "knowledge": CFG.get("knowledge", ""),
+        "knowledge_file": {"exists": KB_PATH.exists(),
+                           "chars": len(KB_PATH.read_text(encoding="utf-8")) if KB_PATH.exists() else 0},
         "ai_mode": ai_mode(),
         "proxy": {"provider": pc["name"], "model": pc["model"], "configured": bool(pc["api_key"] and pc["base_url"] and pc["model"])},
         "active_profile": CFG.get("active_profile"),
@@ -214,7 +236,7 @@ async def run_ai(cid, image_b64s, question, new_conv=False):
         return
     if new_conv:
         HISTORY.clear()
-    system = {"role": "system", "content": resolve_prompt()}
+    system = {"role": "system", "content": resolve_system()}
     if not HISTORY or HISTORY[0].get("role") != "system":
         HISTORY.insert(0, system)
     else:
@@ -508,7 +530,7 @@ def apply_patch(patch):
             CFG["hotkey"] = v
             if HOTKEY:
                 HOTKEY.configure(hk_items())
-        elif k in ("monitor", "roi", "scene", "ai_mode", "port", "jpeg_quality", "max_image_dim", "custom_prompt"):
+        elif k in ("monitor", "roi", "scene", "ai_mode", "port", "jpeg_quality", "max_image_dim", "custom_prompt", "knowledge"):
             CFG[k] = v
     save_config(CFG)
     # restart watcher if poll params changed is unnecessary (read each loop)
