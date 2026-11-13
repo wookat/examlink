@@ -50,6 +50,8 @@ examlink 服务 (可选, 截图源)
 - **多供应商**：OpenAI / 豆包 / 通义 / 智谱 / Kimi / Gemini / OpenRouter / Ollama / 自定义，均走 OpenAI 兼容接口
 - **答题场景**：通用 / 选择题 / 编程题 / 英语 / 填空简答
 - **追问**：同一会话内继续提问（代理模式由服务端保历史，直连模式由手机保历史）
+- **视线布局**：正视/左侧视/右侧视/远视预设——答案列贴到离你最近的屏幕边缘，远视=超大字只看最新答案；内容对齐+宽度+字号均可调；高对比黑底白字模式
+- **快捷键**：考试电脑全局热键（F9/F10/PrintScreen/鼠标中键/侧键X1X2/Ctrl+Shift+Q 等，pynput 全局监听）；答题页可为本设备单独录制按键/鼠标键
 - **安全**：URL token 配对；默认绑定 0.0.0.0 仅供局域网使用
 
 ## 配置 (config.json)
@@ -64,6 +66,7 @@ examlink 服务 (可选, 截图源)
 | proxy.* | 代理模式 provider/base_url/api_key/model |
 | ai_mode | proxy / direct |
 | scene | 默认答题场景 |
+| hotkey.* | 考试电脑全局热键：enabled + trigger（`key:f9` / `mouse:middle` / `combo:ctrl+shift+q` …） |
 
 ## HTTP API（供外部客户端/扩展使用）
 

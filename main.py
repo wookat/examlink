@@ -24,6 +24,7 @@ from pathlib import Path
 
 import capture as cap
 import ai as aimod
+import hotkeys as hkmod
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect, Request
 from fastapi.responses import FileResponse, JSONResponse, Response, StreamingResponse
 
@@ -129,6 +130,8 @@ def public_state():
         "providers": {k: {"name": v["name"], "base_url": v["base_url"], "models": v["models"]}
                       for k, v in aimod.PROVIDERS.items()},
         "scenes": effective_scenes(),
+        "hotkey": CFG.get("hotkey", {}),
+        "hotkey_choices": hkmod.TRIGGER_CHOICES,
     }
 
 
@@ -271,14 +274,31 @@ def on_auto_trigger():
 
 WATCHER = None
 MAIN_LOOP = None
+HOTKEY = None
+
+
+def on_hotkey():
+    """Global hotkey fired on the exam PC -> schedule a capture."""
+    if MAIN_LOOP is not None and MAIN_LOOP.is_running():
+        asyncio.run_coroutine_threadsafe(do_capture("hotkey", ask=True), MAIN_LOOP)
+
+
+def make_hotkey():
+    l = hkmod.HotkeyListener(on_fire=on_hotkey)
+    hk = CFG.get("hotkey", {})
+    if hk.get("enabled") and hk.get("trigger"):
+        l.configure(hk["trigger"])
+    l.start()
+    return l
 
 
 @app.on_event("startup")
 async def _startup():
-    global WATCHER, MAIN_LOOP
+    global WATCHER, MAIN_LOOP, HOTKEY
     MAIN_LOOP = asyncio.get_running_loop()
     WATCHER = make_watcher()
     WATCHER.start()
+    HOTKEY = make_hotkey()
     ips = lan_ips()
     print("=" * 60)
     print(" examlink running")
@@ -466,6 +486,11 @@ def apply_patch(patch):
                     ov[sid] = prompt
                 else:
                     ov.pop(sid, None)
+        elif k == "hotkey" and isinstance(v, dict):
+            CFG.setdefault("hotkey", {}).update(v)
+            if HOTKEY:
+                hk = CFG["hotkey"]
+                HOTKEY.configure(hk.get("trigger") if hk.get("enabled") else "")
         elif k in ("monitor", "roi", "scene", "ai_mode", "port", "jpeg_quality", "max_image_dim", "custom_prompt"):
             CFG[k] = v
     save_config(CFG)

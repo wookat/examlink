@@ -99,9 +99,43 @@ button { font-family: inherit; }
 
 /* ---------- live view ---------- */
 .view { min-height: calc(100dvh - var(--topbar-h)); display: flex; flex-direction: column; }
-#view-live { max-width: 760px; margin: 0 auto; width: 100%; }
+#view-live { width: 100%; }
 
 .feed { flex: 1; padding: 14px 14px 8px; display: flex; flex-direction: column; gap: 14px; }
+
+/* content column position — gaze/align control */
+#view-live { --cw: 80%; }
+.feed > *, .composer .quick-row, .composer .ask-row {
+  max-width: min(var(--cw), 1100px); width: 100%;
+}
+body[data-align="center"] .feed > *, body[data-align="center"] .composer .quick-row,
+body[data-align="center"] .composer .ask-row { margin-inline: auto; }
+body[data-align="left"] .feed > *, body[data-align="left"] .composer .quick-row,
+body[data-align="left"] .composer .ask-row { margin-right: auto; }
+body[data-align="right"] .feed > *, body[data-align="right"] .composer .quick-row,
+body[data-align="right"] .composer .ask-row { margin-left: auto; }
+
+/* latest-answer-only (distance viewing) */
+body.latest-only .feed > .ans:not(:last-child) { display: none; }
+
+/* ---------- high contrast theme ---------- */
+body[data-contrast="high"] {
+  --bg: #000; --bg-soft: #000; --card: #000; --card-solid: #000;
+  --border: #ffffff; --border-strong: #ffffff;
+  --text: #ffffff; --muted: #cfd4dd; --faint: #9aa2b1;
+  --accent: #7ea0ff; --accent-soft: rgba(126,160,255,.28);
+  background: #000;
+}
+body[data-contrast="high"] .topbar { background: #000; border-bottom-color: #fff; }
+body[data-contrast="high"] .ans,
+body[data-contrast="high"] .card { border-width: 1.5px; backdrop-filter: none; }
+body[data-contrast="high"] .composer { background: #000; }
+body[data-contrast="high"] .qbtn,
+body[data-contrast="high"] .btn,
+body[data-contrast="high"] .icon-btn,
+body[data-contrast="high"] .fc-btn { border-width: 1.5px; }
+body[data-contrast="high"] .ans .md { font-weight: 500; }
+body[data-contrast="high"] .shot-thumb { border-color: #fff; opacity: 1; }
 
 /* answer card */
 .ans {
@@ -277,6 +311,17 @@ input:checked + .slider::after { left: 23px; }
   padding: 3px 8px; border-radius: 999px; align-self: center;
 }
 .hint { font-size: 12px; color: var(--faint); margin-top: 10px; line-height: 1.5; }
+
+/* hotkey recorder */
+.hk-rec {
+  margin-top: 6px; padding: 11px 12px; border-radius: 11px;
+  border: 1px dashed var(--border-strong); background: rgba(10,12,17,.7);
+  font-size: 14px; color: var(--text); font-family: var(--mono);
+  cursor: pointer; user-select: none; min-height: 42px;
+  display: flex; align-items: center;
+}
+.hk-rec.listening { border-color: var(--accent); border-style: solid; color: var(--accent); animation: pulse 1s infinite; }
+.divider { height: 1px; background: var(--border); margin: 14px 0 4px; }
 .card.danger { border-color: rgba(255,107,107,.2); }
 .settings-foot { text-align: center; font-size: 12px; padding: 10px 0 20px; }
 

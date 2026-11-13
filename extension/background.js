@@ -16,6 +16,24 @@ chrome.runtime.onInstalled.addListener(() => {
   chrome.sidePanel.setPanelBehavior({ openPanelOnActionClick: true }).catch(() => {});
 });
 
+// global shortcuts (chrome://extensions/shortcuts to customize)
+chrome.commands.onCommand.addListener(async (cmd) => {
+  if (cmd === "open-panel") {
+    chrome.sidePanel.open({}).catch(() => {});
+    return;
+  }
+  if (cmd === "solve-now") {
+    const r = await chrome.storage.local.get("examlinkPanel");
+    const CFG = r.examlinkPanel;
+    if (!CFG) { reply({ status: "error", text: "请先打开侧边栏完成设置" }); return; }
+    const source = CFG.src === "examlink"
+      ? { type: "examlink", base: CFG.exBase, token: CFG.exToken, roi: CFG.exRoi }
+      : { type: "tab" };
+    solve({ source, site: CFG.site, prompt: CFG.prompt, focusTab: CFG.focusTab, newChat: CFG.newChat })
+      .catch((e) => reply({ status: "error", text: String(e.message || e) }));
+  }
+});
+
 // ---------------- message hub ----------------
 chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
   if (!msg || !msg.kind) return;

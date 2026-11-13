@@ -177,3 +177,15 @@ input[type=range] { width: 100%; accent-color: var(--accent); }
 
 ::-webkit-scrollbar { width: 8px; }
 ::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.12); border-radius: 4px; }
+
+/* latest-only & high contrast */
+body.latest-only .ans:not(:last-child) { display: none; }
+body[data-contrast="high"] {
+  --bg: #000; --bg2: #000; --card: #000;
+  --card-border: #ffffff; --text: #fff; --dim: #cfd4dd;
+  background: #000;
+}
+body[data-contrast="high"] .ans, body[data-contrast="high"] .btn,
+body[data-contrast="high"] .icon-btn { border-width: 1.5px; }
+body[data-contrast="high"] .topbar, body[data-contrast="high"] .inputbar { background: #000; border-color: #fff; }
+body[data-contrast="high"] .md { font-weight: 500; }

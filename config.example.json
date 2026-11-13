@@ -25,5 +25,9 @@
   "ai_mode": "",
   "scene": "general",
   "custom_prompt": "",
-  "scenes": {}
+  "scenes": {},
+  "hotkey": {
+    "enabled": false,
+    "trigger": "key:f9"
+  }
 }

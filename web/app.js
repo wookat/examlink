@@ -86,6 +86,140 @@ function applyFont(px) {
 $("#fontMinus").onclick = () => applyFont(fontPx - 2);
 $("#fontPlus").onclick = () => applyFont(fontPx + 2);
 
+// ---------------- display prefs (gaze / align / contrast / latest) ----------------
+const DISP_KEY = "examlink.disp";
+let DISP = { align: "center", cw: 80, contrast: "std", latestOnly: false, gaze: "" };
+try { Object.assign(DISP, JSON.parse(localStorage.getItem(DISP_KEY) || "{}")); } catch {}
+
+const GAZE_PRESETS = {
+  left:  { align: "right",  cw: 58 },
+  front: { align: "center", cw: 80 },
+  right: { align: "left",   cw: 58 },
+  far:   { align: "center", cw: 88, latestOnly: true, font: 30 },
+};
+
+function saveDisp() { localStorage.setItem(DISP_KEY, JSON.stringify(DISP)); }
+function applyDisp() {
+  document.body.dataset.align = DISP.align;
+  document.body.dataset.contrast = DISP.contrast;
+  document.body.classList.toggle("latest-only", !!DISP.latestOnly);
+  $("#view-live").style.setProperty("--cw", DISP.cw + "%");
+  // settings sync
+  document.querySelectorAll("#alignSeg .seg-btn").forEach(b =>
+    b.classList.toggle("active", b.dataset.align === DISP.align));
+  document.querySelectorAll("#gazeSeg .seg-btn").forEach(b =>
+    b.classList.toggle("active", b.dataset.gaze === DISP.gaze));
+  if ($("#widthRange")) { $("#widthRange").value = DISP.cw; $("#vWidth").textContent = DISP.cw + "%"; }
+  if ($("#contrastSw")) $("#contrastSw").checked = DISP.contrast === "high";
+  if ($("#latestSw")) $("#latestSw").checked = !!DISP.latestOnly;
+}
+function setGaze(g) {
+  const p = GAZE_PRESETS[g]; if (!p) return;
+  DISP.gaze = g;
+  DISP.align = p.align;
+  DISP.cw = p.cw;
+  if (p.latestOnly !== undefined) DISP.latestOnly = p.latestOnly;
+  applyDisp(); saveDisp();
+  if (p.font) applyFont(p.font);
+}
+document.querySelectorAll("#gazeSeg .seg-btn").forEach(b => b.onclick = () => setGaze(b.dataset.gaze));
+document.querySelectorAll("#alignSeg .seg-btn").forEach(b => b.onclick = () => {
+  DISP.align = b.dataset.align; DISP.gaze = ""; applyDisp(); saveDisp();
+});
+$("#widthRange")?.addEventListener("input", e => {
+  DISP.cw = parseInt(e.target.value, 10); DISP.gaze = ""; applyDisp(); saveDisp();
+});
+$("#contrastSw")?.addEventListener("change", e => {
+  DISP.contrast = e.target.checked ? "high" : "std"; applyDisp(); saveDisp();
+});
+$("#latestSw")?.addEventListener("change", e => {
+  DISP.latestOnly = e.target.checked; applyDisp(); saveDisp();
+});
+
+// ---------------- device hotkeys (this browser page) ----------------
+const HK_KEY = "examlink.hk";
+let HK = { solve: "", snap: "" };
+try { Object.assign(HK, JSON.parse(localStorage.getItem(HK_KEY) || "{}")); } catch {}
+
+const HK_LABELS = { "mouse:1": "鼠标中键", "mouse:3": "鼠标侧键X1", "mouse:4": "鼠标侧键X2" };
+function hkLabel(code) {
+  if (!code) return "未设置";
+  if (HK_LABELS[code]) return HK_LABELS[code];
+  if (code.startsWith("mouse:")) return "鼠标键 " + code.slice(6);
+  return code.replace(/\+/g, " + ").replace(/Key|Digit/, m => m === "Key" ? "" : "");
+}
+function saveHK() { localStorage.setItem(HK_KEY, JSON.stringify(HK)); renderHK(); }
+function renderHK() {
+  $("#hkSolveRec").textContent = hkLabel(HK.solve);
+  $("#hkSnapRec").textContent = hkLabel(HK.snap);
+}
+
+let recording = null; // 'solve' | 'snap'
+function startRec(which) {
+  recording = which;
+  const el = which === "solve" ? $("#hkSolveRec") : $("#hkSnapRec");
+  el.textContent = "按下按键或鼠标键… (Esc取消)";
+  el.classList.add("listening");
+  el.focus();
+}
+function stopRec() {
+  recording = null;
+  $("#hkSolveRec").classList.remove("listening");
+  $("#hkSnapRec").classList.remove("listening");
+  renderHK();
+}
+function comboOf(e) {
+  const parts = [];
+  if (e.ctrlKey) parts.push("ctrl");
+  if (e.altKey) parts.push("alt");
+  if (e.shiftKey) parts.push("shift");
+  if (e.metaKey) parts.push("win");
+  const c = e.code;
+  if (["ControlLeft","ControlRight","AltLeft","AltRight","ShiftLeft","ShiftRight","MetaLeft","MetaRight"].includes(c)) return null;
+  parts.push(c);
+  return parts.join("+");
+}
+$("#hkSolveRec").addEventListener("click", () => startRec("solve"));
+$("#hkSnapRec").addEventListener("click", () => startRec("snap"));
+$("#hkClear").onclick = () => { HK = { solve: "", snap: "" }; saveHK(); toast("本设备按键已清除"); };
+
+window.addEventListener("keydown", (e) => {
+  if (recording) {
+    e.preventDefault();
+    if (e.key === "Escape") { stopRec(); return; }
+    const c = comboOf(e);
+    if (c) { HK[recording] = c; saveHK(); stopRec(); }
+    return;
+  }
+  if (view !== "live") return;
+  const tag = (e.target.tagName || "").toLowerCase();
+  if (tag === "input" || tag === "textarea" || e.target.isContentEditable) return;
+  const c = comboOf(e);
+  if (!c) return;
+  if (c === HK.solve && c) { e.preventDefault(); $("#btnCapture").click(); }
+  else if (c === HK.snap && c) { e.preventDefault(); $("#btnSnap").click(); }
+});
+function onPointer(e) {
+  const code = "mouse:" + e.button;
+  if (recording) {
+    e.preventDefault();
+    HK[recording] = code; saveHK(); stopRec();
+    return;
+  }
+  if (view !== "live") return;
+  if (e.button === 0 || e.button === 2) return;
+  if (code === HK.solve || code === HK.snap) {
+    e.preventDefault(); e.stopPropagation();
+    (code === HK.solve ? $("#btnCapture") : $("#btnSnap")).click();
+  }
+}
+window.addEventListener("pointerdown", onPointer, true);
+window.addEventListener("auxclick", (e) => {
+  const code = "mouse:" + e.button;
+  if ((code === HK.solve && HK.solve) || (code === HK.snap && HK.snap)) e.preventDefault();
+}, true);
+window.addEventListener("contextmenu", (e) => { if (recording) e.preventDefault(); }, true);
+
 // ---------------- router ----------------
 function route() {
   const h = location.hash;
@@ -323,6 +457,22 @@ function onState(s) {
   syncProxyUI(s);
   syncPromptUI(s);
   syncModeSeg();
+  syncHotkeyUI(s);
+}
+
+function syncHotkeyUI(s) {
+  const sel = $("#hkTrigger");
+  const choices = s.hotkey_choices || {};
+  if (sel.options.length !== Object.keys(choices).length) {
+    sel.innerHTML = "";
+    for (const [v, label] of Object.entries(choices)) {
+      const o = document.createElement("option"); o.value = v; o.textContent = label;
+      sel.appendChild(o);
+    }
+  }
+  const hk = s.hotkey || {};
+  sel.value = hk.trigger || "";
+  $("#hkEnabled").checked = !!hk.enabled;
 }
 
 function syncAutoUI(a) {
@@ -614,8 +764,15 @@ onProvChange($("#dProvider"), $("#dBase"), $("#dModel"));
   if (p && p.models && p.models[0] && !$("#dModel").value) $("#dModel").value = p.models[0];
 })();
 
+$("#hkEnabled").addEventListener("change", e =>
+  send({ t: "set", patch: { hotkey: { enabled: e.target.checked, trigger: $("#hkTrigger").value } } }));
+$("#hkTrigger").addEventListener("change", e =>
+  send({ t: "set", patch: { hotkey: { enabled: $("#hkEnabled").checked, trigger: e.target.value } } }));
+
 // ---------------- boot ----------------
 applyFont(fontPx);
+applyDisp();
+renderHK();
 ensureFeed();
 route();
 if (!TOKEN_FINAL) toast("URL 缺少 token，请从电脑上显示的链接打开", 4000);

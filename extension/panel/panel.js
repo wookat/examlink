@@ -14,7 +14,7 @@ const SITES = [
 let CFG = {
   src: "examlink", exBase: "", exToken: "", exRoi: true,
   site: "doubao", focusTab: true, newChat: false,
-  prompt: DEFAULT_PROMPT, fontpx: 18,
+  prompt: DEFAULT_PROMPT, fontpx: 18, contrast: "std", latestOnly: false,
 };
 let curCard = null, reqId = 0;
 
@@ -61,6 +61,12 @@ function initUI() {
 
   applyFont(CFG.fontpx);
   $("#fontRange").value = CFG.fontpx;
+  $("#contrastSw").checked = CFG.contrast === "high";
+  $("#latestSw").checked = !!CFG.latestOnly;
+  document.body.dataset.contrast = CFG.contrast;
+  document.body.classList.toggle("latest-only", !!CFG.latestOnly);
+  $("#contrastSw").onchange = (e) => { CFG.contrast = e.target.checked ? "high" : "std"; document.body.dataset.contrast = CFG.contrast; save(); };
+  $("#latestSw").onchange = (e) => { CFG.latestOnly = e.target.checked; document.body.classList.toggle("latest-only", CFG.latestOnly); save(); };
 
   if (new URLSearchParams(location.search).get("pop")) $("#btnPop").classList.add("hidden");
 }

@@ -3,11 +3,21 @@
   "name": "examlink — 屏幕答题助手",
   "version": "0.1.0",
   "description": "把屏幕截图+提示词投送到你已登录的 AI 网页（ChatGPT/豆包/Gemini/DeepSeek/Kimi），答案在侧边栏大屏显示，无需 API Key。",
-  "permissions": ["sidePanel", "storage", "scripting", "tabs", "activeTab", "notifications"],
+  "permissions": ["sidePanel", "storage", "scripting", "tabs", "activeTab", "notifications", "commands"],
   "host_permissions": ["<all_urls>"],
   "background": { "service_worker": "background.js" },
   "side_panel": { "default_path": "panel/panel.html" },
   "action": { "default_title": "examlink" },
+  "commands": {
+    "solve-now": {
+      "suggested_key": { "default": "Ctrl+Shift+S", "mac": "Command+Shift+S" },
+      "description": "截图答题（用已保存的设置）"
+    },
+    "open-panel": {
+      "suggested_key": { "default": "Ctrl+Shift+E", "mac": "Command+Shift+E" },
+      "description": "打开侧边栏"
+    }
+  },
   "content_scripts": [
     {
       "matches": [
