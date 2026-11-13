@@ -40,6 +40,11 @@
       <button id="btnAsk" class="qbtn primary">发送</button>
     </div>
   </footer>
+
+  <nav id="navCtl" class="nav-ctl hidden">
+    <button id="navPrev" title="上一题">‹</button>
+    <button id="navNext" title="下一题">›</button>
+  </nav>
 </main>
 
 <!-- ============ 设置页 ============ -->
@@ -67,7 +72,13 @@
       <label class="field">捕获显示器
         <select id="monitorSel"></select>
       </label>
-      <p class="hint">自动触发只监控所选区域；留空=自动跟随主屏。建议框选题目区域以减少误触发。</p>
+      <div class="slider-group">
+        <label>截图质量 <output id="vQuality"></output></label>
+        <input type="range" id="imgQuality" min="60" max="100" step="1">
+        <label>最大边长 <output id="vMaxDim"></output></label>
+        <input type="range" id="imgMaxDim" min="1200" max="4096" step="100">
+      </div>
+      <p class="hint">自动触发只监控所选区域；留空=自动跟随主屏。质量/边长越高越清晰，但截图与 AI 请求更慢。</p>
     </section>
 
     <!-- 自动触发 -->
@@ -198,26 +209,24 @@
 
     <!-- 快捷键 -->
     <section class="card">
-      <h3>快捷键</h3>
-      <label class="switch-row">
-        <span class="switch-text">考试电脑全局热键</span>
-        <input type="checkbox" id="hkEnabled"><span class="slider"></span>
-      </label>
-      <label class="field">触发按键（在考试电脑上按）
-        <select id="hkTrigger"></select>
-      </label>
-      <p class="hint">按下即"截屏答题"。鼠标中键会与页面自动滚动冲突，建议选 F 键或侧键。</p>
+      <h3>快捷键 <span class="card-sub">考试电脑全局 / 本设备页面</span></h3>
+      <div class="field-label">考试电脑（按键/鼠标在考试机上生效）</div>
+      <div id="hkGrid" class="hk-grid"></div>
+      <p class="hint">滚轮也可以作为触发——在考试机上滚动滚轮即可让答案屏翻页。鼠标中键会与页面自动滚动冲突，建议选 F 键或侧键。</p>
       <div class="divider"></div>
-      <label class="field">本设备按键 · 截屏答题
-        <div class="hk-rec" id="hkSolveRec" tabindex="0">未设置</div>
-      </label>
-      <label class="field">本设备按键 · 仅截图
-        <div class="hk-rec" id="hkSnapRec" tabindex="0">未设置</div>
-      </label>
+      <div class="field-label">本设备（答题页前台时生效）</div>
+      <div class="hk-rec-grid">
+        <label class="field">截屏答题<div class="hk-rec" id="hkSolveRec" tabindex="0">未设置</div></label>
+        <label class="field">仅截图<div class="hk-rec" id="hkSnapRec" tabindex="0">未设置</div></label>
+        <label class="field">上一题<div class="hk-rec" id="hkPrevRec" tabindex="0">未设置</div></label>
+        <label class="field">下一题<div class="hk-rec" id="hkNextRec" tabindex="0">未设置</div></label>
+        <label class="field">向上滚<div class="hk-rec" id="hkUpRec" tabindex="0">未设置</div></label>
+        <label class="field">向下滚<div class="hk-rec" id="hkDownRec" tabindex="0">未设置</div></label>
+      </div>
       <div class="btn-row">
         <button id="hkClear" class="btn ghost small">清除本设备按键</button>
       </div>
-      <p class="hint">点击方框后按下按键/鼠标键录制。仅当本页面处于前台时生效。</p>
+      <p class="hint">点击方框后按下按键/鼠标键录制；Esc 取消，再次点击停止录制。</p>
     </section>
 
     <!-- 保存与危险区 -->

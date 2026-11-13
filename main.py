@@ -130,8 +130,11 @@ def public_state():
         "providers": {k: {"name": v["name"], "base_url": v["base_url"], "models": v["models"]}
                       for k, v in aimod.PROVIDERS.items()},
         "scenes": effective_scenes(),
-        "hotkey": CFG.get("hotkey", {}),
+        "hotkey": {"items": hk_items()},
         "hotkey_choices": hkmod.TRIGGER_CHOICES,
+        "hotkey_actions": hkmod.ACTIONS,
+        "jpeg_quality": CFG.get("jpeg_quality", 92),
+        "max_image_dim": CFG.get("max_image_dim", 3000),
     }
 
 
@@ -277,17 +280,32 @@ MAIN_LOOP = None
 HOTKEY = None
 
 
-def on_hotkey():
-    """Global hotkey fired on the exam PC -> schedule a capture."""
-    if MAIN_LOOP is not None and MAIN_LOOP.is_running():
+def on_hotkey(action):
+    """Global hotkey fired on the exam PC -> capture or nav broadcast."""
+    if MAIN_LOOP is None or not MAIN_LOOP.is_running():
+        return
+    if action == "capture":
         asyncio.run_coroutine_threadsafe(do_capture("hotkey", ask=True), MAIN_LOOP)
+    elif action == "snap":
+        asyncio.run_coroutine_threadsafe(do_capture("hotkey", ask=False), MAIN_LOOP)
+    elif action.startswith("nav_"):
+        asyncio.run_coroutine_threadsafe(broadcast({"t": "nav", "action": action}), MAIN_LOOP)
+
+
+def hk_items():
+    """Normalized hotkey items list, migrating legacy {enabled,trigger}."""
+    hk = CFG.get("hotkey", {})
+    items = hk.get("items")
+    if isinstance(items, list):
+        return [{"action": i.get("action", "capture"), "trigger": i.get("trigger", "")} for i in items]
+    if hk.get("enabled") and hk.get("trigger"):  # legacy single binding
+        return [{"action": "capture", "trigger": hk["trigger"]}]
+    return []
 
 
 def make_hotkey():
     l = hkmod.HotkeyListener(on_fire=on_hotkey)
-    hk = CFG.get("hotkey", {})
-    if hk.get("enabled") and hk.get("trigger"):
-        l.configure(hk["trigger"])
+    l.configure(hk_items())
     l.start()
     return l
 
@@ -487,10 +505,9 @@ def apply_patch(patch):
                 else:
                     ov.pop(sid, None)
         elif k == "hotkey" and isinstance(v, dict):
-            CFG.setdefault("hotkey", {}).update(v)
+            CFG["hotkey"] = v
             if HOTKEY:
-                hk = CFG["hotkey"]
-                HOTKEY.configure(hk.get("trigger") if hk.get("enabled") else "")
+                HOTKEY.configure(hk_items())
         elif k in ("monitor", "roi", "scene", "ai_mode", "port", "jpeg_quality", "max_image_dim", "custom_prompt"):
             CFG[k] = v
     save_config(CFG)

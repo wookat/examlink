@@ -2,8 +2,8 @@
   "port": 8791,
   "token": "",
   "monitor": null,
-  "jpeg_quality": 88,
-  "max_image_dim": 2000,
+  "jpeg_quality": 92,
+  "max_image_dim": 3000,
   "roi": null,
   "auto": {
     "enabled": false,
@@ -27,7 +27,6 @@
   "custom_prompt": "",
   "scenes": {},
   "hotkey": {
-    "enabled": false,
-    "trigger": "key:f9"
+    "items": []
   }
 }

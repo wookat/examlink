@@ -51,7 +51,9 @@ examlink 服务 (可选, 截图源)
 - **答题场景**：通用 / 选择题 / 编程题 / 英语 / 填空简答
 - **追问**：同一会话内继续提问（代理模式由服务端保历史，直连模式由手机保历史）
 - **视线布局**：正视/左侧视/右侧视/远视预设——答案列贴到离你最近的屏幕边缘，远视=超大字只看最新答案；内容对齐+宽度+字号均可调；高对比黑底白字模式
-- **快捷键**：考试电脑全局热键（F9/F10/PrintScreen/鼠标中键/侧键X1X2/Ctrl+Shift+Q 等，pynput 全局监听）；答题页可为本设备单独录制按键/鼠标键
+- **快捷键**：考试电脑全局热键（F 键/PrintScreen/鼠标中键/侧键X1X2/**滚轮**/组合键，pynput 全局监听），动作含截屏答题/仅截图/上下题/上下滚——滚轮翻页可直接控制第二屏；答题页可为本设备录制按键/鼠标键
+- **逐题导航**：答案卡片滚动吸附，方向键/PageUp/Down/侧键/浮动 ‹› 按钮逐题切换；WS `nav` 事件支持远程翻页
+- **高清截图**：jpeg 质量 60–100、最大边长 1200–4096 可调
 - **安全**：URL token 配对；默认绑定 0.0.0.0 仅供局域网使用
 
 ## 配置 (config.json)
@@ -66,7 +68,8 @@ examlink 服务 (可选, 截图源)
 | proxy.* | 代理模式 provider/base_url/api_key/model |
 | ai_mode | proxy / direct |
 | scene | 默认答题场景 |
-| hotkey.* | 考试电脑全局热键：enabled + trigger（`key:f9` / `mouse:middle` / `combo:ctrl+shift+q` …） |
+| hotkey.items | 考试电脑全局热键 `[{action,trigger}]`：action=capture/snap/nav_next/nav_prev/nav_down/nav_up；trigger=`key:f9` / `mouse:middle` / `mouse:wheel_down` / `combo:ctrl+shift+q` … |
+| jpeg_quality / max_image_dim | 截图 JPEG 质量（默认 92）/ 最大边长（默认 3000） |
 
 ## HTTP API（供外部客户端/扩展使用）
 

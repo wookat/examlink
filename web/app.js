@@ -138,9 +138,10 @@ $("#latestSw")?.addEventListener("change", e => {
 
 // ---------------- device hotkeys (this browser page) ----------------
 const HK_KEY = "examlink.hk";
-let HK = { solve: "", snap: "" };
+let HK = { solve: "", snap: "", prev: "ArrowUp", next: "ArrowDown", up: "PageUp", down: "PageDown" };
 try { Object.assign(HK, JSON.parse(localStorage.getItem(HK_KEY) || "{}")); } catch {}
 
+const HK_SLOTS = { solve: "hkSolveRec", snap: "hkSnapRec", prev: "hkPrevRec", next: "hkNextRec", up: "hkUpRec", down: "hkDownRec" };
 const HK_LABELS = { "mouse:1": "鼠标中键", "mouse:3": "鼠标侧键X1", "mouse:4": "鼠标侧键X2" };
 function hkLabel(code) {
   if (!code) return "未设置";
@@ -150,22 +151,25 @@ function hkLabel(code) {
 }
 function saveHK() { localStorage.setItem(HK_KEY, JSON.stringify(HK)); renderHK(); }
 function renderHK() {
-  $("#hkSolveRec").textContent = hkLabel(HK.solve);
-  $("#hkSnapRec").textContent = hkLabel(HK.snap);
+  for (const [k, id] of Object.entries(HK_SLOTS)) {
+    const el = document.getElementById(id);
+    if (el && !el.classList.contains("listening")) el.textContent = hkLabel(HK[k]);
+  }
 }
 
-let recording = null; // 'solve' | 'snap'
+let recording = null;
 function startRec(which) {
+  stopRec();
   recording = which;
-  const el = which === "solve" ? $("#hkSolveRec") : $("#hkSnapRec");
+  const el = document.getElementById(HK_SLOTS[which]);
   el.textContent = "按下按键或鼠标键… (Esc取消)";
   el.classList.add("listening");
   el.focus();
 }
 function stopRec() {
+  if (!recording) return;
   recording = null;
-  $("#hkSolveRec").classList.remove("listening");
-  $("#hkSnapRec").classList.remove("listening");
+  document.querySelectorAll(".hk-rec.listening").forEach(el => el.classList.remove("listening"));
   renderHK();
 }
 function comboOf(e) {
@@ -179,9 +183,22 @@ function comboOf(e) {
   parts.push(c);
   return parts.join("+");
 }
-$("#hkSolveRec").addEventListener("click", () => startRec("solve"));
-$("#hkSnapRec").addEventListener("click", () => startRec("snap"));
-$("#hkClear").onclick = () => { HK = { solve: "", snap: "" }; saveHK(); toast("本设备按键已清除"); };
+for (const [k, id] of Object.entries(HK_SLOTS)) {
+  const el = document.getElementById(id);
+  if (el) el.addEventListener("click", () => recording === k ? stopRec() : startRec(k));
+}
+$("#hkClear").onclick = () => { HK = { solve: "", snap: "", prev: "", next: "", up: "", down: "" }; saveHK(); toast("本设备按键已清除"); };
+
+function hkAction(code) {
+  if (!code) return false;
+  if (code === HK.solve) { $("#btnCapture").click(); return true; }
+  if (code === HK.snap) { $("#btnSnap").click(); return true; }
+  if (code === HK.prev) { navCard(-1); return true; }
+  if (code === HK.next) { navCard(1); return true; }
+  if (code === HK.up) { scrollPage(-1); return true; }
+  if (code === HK.down) { scrollPage(1); return true; }
+  return false;
+}
 
 window.addEventListener("keydown", (e) => {
   if (recording) {
@@ -195,9 +212,7 @@ window.addEventListener("keydown", (e) => {
   const tag = (e.target.tagName || "").toLowerCase();
   if (tag === "input" || tag === "textarea" || e.target.isContentEditable) return;
   const c = comboOf(e);
-  if (!c) return;
-  if (c === HK.solve && c) { e.preventDefault(); $("#btnCapture").click(); }
-  else if (c === HK.snap && c) { e.preventDefault(); $("#btnSnap").click(); }
+  if (c && hkAction(c)) e.preventDefault();
 });
 function onPointer(e) {
   const code = "mouse:" + e.button;
@@ -208,17 +223,34 @@ function onPointer(e) {
   }
   if (view !== "live") return;
   if (e.button === 0 || e.button === 2) return;
-  if (code === HK.solve || code === HK.snap) {
-    e.preventDefault(); e.stopPropagation();
-    (code === HK.solve ? $("#btnCapture") : $("#btnSnap")).click();
-  }
+  if (hkAction(code)) { e.preventDefault(); e.stopPropagation(); }
 }
 window.addEventListener("pointerdown", onPointer, true);
 window.addEventListener("auxclick", (e) => {
-  const code = "mouse:" + e.button;
-  if ((code === HK.solve && HK.solve) || (code === HK.snap && HK.snap)) e.preventDefault();
+  if (HK["mouse:" + e.button] !== undefined && hkAction("mouse:" + e.button)) e.preventDefault();
 }, true);
 window.addEventListener("contextmenu", (e) => { if (recording) e.preventDefault(); }, true);
+
+// ---------------- card navigation (prev/next question, page scroll) ----------------
+function navCard(dir) {
+  const cards = [...document.querySelectorAll("#answers .ans")];
+  if (!cards.length) return;
+  const feed = $("#answers");
+  const ft = feed.getBoundingClientRect().top + 10;
+  let idx = cards.findIndex(c => c.getBoundingClientRect().bottom > ft);
+  if (idx < 0) idx = cards.length - 1;
+  idx = Math.min(cards.length - 1, Math.max(0, idx + dir));
+  cards[idx].scrollIntoView({ behavior: "smooth", block: "start" });
+}
+function scrollPage(dir) {
+  const feed = $("#answers");
+  feed.scrollBy({ top: dir * feed.clientHeight * 0.8, behavior: "smooth" });
+}
+$("#navPrev").onclick = () => navCard(-1);
+$("#navNext").onclick = () => navCard(1);
+function updateNavCtl() {
+  $("#navCtl").classList.toggle("hidden", document.querySelectorAll("#answers .ans").length < 2);
+}
 
 // ---------------- router ----------------
 function route() {
@@ -253,6 +285,7 @@ function addCard({ id, image, trigger, tag }) {
     div.querySelector(".ans-head").appendChild(img);
   }
   feed.appendChild(div);
+  updateNavCtl();
   scrollFeed();
   return { el: div, md: div.querySelector(".md") };
 }
@@ -325,7 +358,14 @@ function handle(m) {
       $("#btnAbort")?.classList.remove("hidden");
       break;
     }
-    case "cleared": $("#answers").innerHTML = ""; ensureFeed(); break;
+    case "nav": {
+      if (m.action === "nav_next") navCard(1);
+      else if (m.action === "nav_prev") navCard(-1);
+      else if (m.action === "nav_down") scrollPage(1);
+      else if (m.action === "nav_up") scrollPage(-1);
+      break;
+    }
+    case "cleared": $("#answers").innerHTML = ""; ensureFeed(); updateNavCtl(); break;
     case "bye": toast("服务已关闭"); break;
   }
 }
@@ -461,18 +501,40 @@ function onState(s) {
 }
 
 function syncHotkeyUI(s) {
-  const sel = $("#hkTrigger");
+  const grid = $("#hkGrid");
+  if (!grid || grid.contains(document.activeElement)) return;
+  const order = ["capture", "snap", "nav_next", "nav_prev", "nav_down", "nav_up"];
+  const actions = s.hotkey_actions || {};
   const choices = s.hotkey_choices || {};
-  if (sel.options.length !== Object.keys(choices).length) {
-    sel.innerHTML = "";
-    for (const [v, label] of Object.entries(choices)) {
-      const o = document.createElement("option"); o.value = v; o.textContent = label;
+  const items = Object.fromEntries(((s.hotkey || {}).items || []).map(i => [i.action, i.trigger]));
+  grid.innerHTML = "";
+  for (const a of order) {
+    const lab = document.createElement("div");
+    lab.className = "hk-act"; lab.textContent = actions[a] || a;
+    const sel = document.createElement("select");
+    sel.dataset.action = a;
+    for (const [v, t] of Object.entries(choices)) {
+      const o = document.createElement("option"); o.value = v; o.textContent = t;
       sel.appendChild(o);
     }
+    sel.value = items[a] || "";
+    sel.onchange = () => {
+      const arr = [...grid.querySelectorAll("select")]
+        .map(x => ({ action: x.dataset.action, trigger: x.value }))
+        .filter(i => i.trigger);
+      send({ t: "set", patch: { hotkey: { items: arr } } });
+    };
+    grid.append(lab, sel);
   }
-  const hk = s.hotkey || {};
-  sel.value = hk.trigger || "";
-  $("#hkEnabled").checked = !!hk.enabled;
+  // image quality sliders
+  if ($("#imgQuality") && document.activeElement !== $("#imgQuality")) {
+    $("#imgQuality").value = s.jpeg_quality ?? 92;
+    $("#vQuality").textContent = (s.jpeg_quality ?? 92) + "%";
+  }
+  if ($("#imgMaxDim") && document.activeElement !== $("#imgMaxDim")) {
+    $("#imgMaxDim").value = s.max_image_dim ?? 3000;
+    $("#vMaxDim").textContent = (s.max_image_dim ?? 3000) + "px";
+  }
 }
 
 function syncAutoUI(a) {
@@ -764,10 +826,12 @@ onProvChange($("#dProvider"), $("#dBase"), $("#dModel"));
   if (p && p.models && p.models[0] && !$("#dModel").value) $("#dModel").value = p.models[0];
 })();
 
-$("#hkEnabled").addEventListener("change", e =>
-  send({ t: "set", patch: { hotkey: { enabled: e.target.checked, trigger: $("#hkTrigger").value } } }));
-$("#hkTrigger").addEventListener("change", e =>
-  send({ t: "set", patch: { hotkey: { enabled: $("#hkEnabled").checked, trigger: e.target.value } } }));
+$("#imgQuality")?.addEventListener("input", () => $("#vQuality").textContent = $("#imgQuality").value + "%");
+$("#imgQuality")?.addEventListener("change", () =>
+  send({ t: "set", patch: { jpeg_quality: parseInt($("#imgQuality").value, 10) } }));
+$("#imgMaxDim")?.addEventListener("input", () => $("#vMaxDim").textContent = $("#imgMaxDim").value + "px");
+$("#imgMaxDim")?.addEventListener("change", () =>
+  send({ t: "set", patch: { max_image_dim: parseInt($("#imgMaxDim").value, 10) } }));
 
 // ---------------- boot ----------------
 applyFont(fontPx);
