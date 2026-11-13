@@ -106,7 +106,8 @@ function applyDisp() {
   document.body.dataset.align = DISP.align;
   document.body.dataset.contrast = DISP.contrast;
   document.body.classList.toggle("latest-only", !!DISP.latestOnly);
-  $("#view-live").style.setProperty("--cw", DISP.cw + "%");
+  const narrow = window.matchMedia("(max-width: 640px)").matches;
+  $("#view-live").style.setProperty("--cw", (narrow ? Math.max(DISP.cw, 86) : DISP.cw) + "%");
   // settings sync
   document.querySelectorAll("#alignSeg .seg-btn").forEach(b =>
     b.classList.toggle("active", b.dataset.align === DISP.align));
@@ -264,6 +265,7 @@ function route() {
   if (view === "settings" && !previewLoaded) loadPreview();
 }
 window.addEventListener("hashchange", route);
+window.addEventListener("resize", applyDisp);
 
 // ---------------- cards ----------------
 function ensureFeed() {
@@ -501,7 +503,22 @@ function onState(s) {
   syncPromptUI(s);
   syncModeSeg();
   syncHotkeyUI(s);
+  paintRanges();
 }
+
+/* keep webkit range-fill in sync: --fill % drives the colored track */
+function paintRanges() {
+  document.querySelectorAll('input[type=range]').forEach(el => {
+    const min = +el.min || 0, max = +el.max || 100;
+    el.style.setProperty('--fill', ((el.value - min) / (max - min) * 100) + '%');
+  });
+}
+document.addEventListener('input', e => {
+  if (e.target.matches('input[type=range]')) {
+    const el = e.target, min = +el.min || 0, max = +el.max || 100;
+    el.style.setProperty('--fill', ((el.value - min) / (max - min) * 100) + '%');
+  }
+});
 
 function syncHotkeyUI(s) {
   const grid = $("#hkGrid");
@@ -851,6 +868,7 @@ $("#imgMaxDim")?.addEventListener("change", () =>
 // ---------------- boot ----------------
 applyFont(fontPx);
 applyDisp();
+paintRanges();
 renderHK();
 ensureFeed();
 route();
