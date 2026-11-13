@@ -2,103 +2,192 @@
 <html lang="zh-CN">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>examlink</title>
-<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>📸</text></svg>">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>◈</text></svg>">
 <link rel="stylesheet" href="/style.css">
 </head>
 <body>
-<div id="app">
-  <header>
-    <div class="h-title">examlink</div>
-    <div class="h-status"><span id="connDot"></span><span id="connText">连接中</span></div>
+
+<!-- ============ 答题屏（默认视图，远距离可读） ============ -->
+<main id="view-live" class="view">
+  <header class="topbar">
+    <div class="brand"><span class="logo">◈</span> examlink</div>
+    <div class="topbar-right">
+      <span id="autoPill" class="pill pill-off">自动关</span>
+      <span id="busyDot" class="busy-dot hidden"></span>
+      <div class="fontctl" title="字体大小">
+        <button id="fontMinus" class="fc-btn">A−</button>
+        <span id="fontPct">100%</span>
+        <button id="fontPlus" class="fc-btn">A+</button>
+      </div>
+      <a class="icon-btn" href="#/settings" title="设置">⚙</a>
+    </div>
   </header>
 
-  <!-- 画面预览 + 截图控制 -->
-  <section class="card">
-    <div class="card-title">实时画面 <span id="roiBadge" class="badge hidden"></span></div>
-    <div id="previewWrap">
-      <img id="preview" alt="preview">
-      <div id="roiBox" class="hidden"></div>
-      <div id="roiHint" class="hidden">拖动框选监控区域，松开完成</div>
-    </div>
-    <div class="btn-row">
-      <button id="btnCapture" class="btn primary">📸 截屏答题</button>
-      <button id="btnSnap" class="btn">仅截图</button>
-      <button id="btnRoi" class="btn">框选区域</button>
-      <button id="btnClearRoi" class="btn ghost hidden">清除ROI</button>
-    </div>
-    <div id="lastCap" class="lastcap hidden"></div>
-  </section>
+  <div id="connBar" class="conn-bar hidden"><span id="connDot"></span><span id="connText">连接中…</span></div>
 
-  <!-- 自动触发 -->
-  <section class="card">
-    <div class="card-title">自动触发</div>
-    <label class="switch-row">
-      <span>像素差异自动答题</span>
-      <input type="checkbox" id="autoEnabled"><span class="slider"></span>
-    </label>
-    <div class="grid2">
-      <label>灵敏度 <b id="vThreshold"></b></label>
-      <input type="range" id="autoThreshold" min="1" max="20" step="0.5">
-      <label>稳定等待 <b id="vStable"></b></label>
-      <input type="range" id="autoStable" min="0.5" max="5" step="0.5">
-      <label>冷却时间 <b id="vCooldown"></b></label>
-      <input type="range" id="autoCooldown" min="2" max="30" step="1">
+  <section id="answers" class="feed"></section>
+
+  <footer class="composer">
+    <div class="quick-row">
+      <button id="btnCapture" class="qbtn primary">📸 答题</button>
+      <button id="btnSnap" class="qbtn">截图</button>
+      <button id="btnAbort" class="qbtn danger hidden">■ 停止</button>
     </div>
-    <div class="btn-row">
-      <label class="inline">显示器
+    <div class="ask-row">
+      <input id="askInput" placeholder="追问 / 补充说明…" autocomplete="off">
+      <button id="btnAsk" class="qbtn primary">发送</button>
+    </div>
+  </footer>
+</main>
+
+<!-- ============ 设置页 ============ -->
+<main id="view-settings" class="view hidden">
+  <header class="topbar">
+    <a class="icon-btn" href="#/">←</a>
+    <div class="brand"><span class="logo">◈</span> 设置</div>
+    <div class="topbar-right"><span id="connDot2" class="conn-dot"></span></div>
+  </header>
+
+  <div class="settings">
+    <!-- 画面与显示器 -->
+    <section class="card">
+      <h3>画面与显示器</h3>
+      <div class="preview-wrap" id="settingsPreviewWrap">
+        <img id="preview" alt="preview">
+        <div id="roiBox" class="roi-box hidden"></div>
+        <div id="roiHint" class="roi-hint hidden">拖动框选监控区域</div>
+      </div>
+      <div class="btn-row">
+        <button id="btnRoi" class="btn">框选监控区域</button>
+        <button id="btnClearRoi" class="btn ghost hidden">清除</button>
+      </div>
+      <div id="roiBadge" class="roi-badge hidden">已设置监控区域</div>
+      <label class="field">捕获显示器
         <select id="monitorSel"></select>
       </label>
-      <span id="autoState" class="muted"></span>
-    </div>
-  </section>
+      <p class="hint">自动触发只监控所选区域；留空=自动跟随主屏。建议框选题目区域以减少误触发。</p>
+    </section>
 
-  <!-- AI 设置 -->
-  <section class="card">
-    <div class="card-title">AI 模型</div>
-    <div class="btn-row seg" id="modeSeg">
-      <button data-mode="proxy" class="btn seg-btn">代理(服务端)</button>
-      <button data-mode="direct" class="btn seg-btn">直连(本机)</button>
-    </div>
-    <div id="proxyCfg">
-      <label>配置档案 <select id="pProfile"></select></label>
-      <label>供应商 <select id="pProvider"></select></label>
-      <label>Base URL <input id="pBase" placeholder="https://..."></label>
-      <label>API Key <input id="pKey" type="password" placeholder="sk-..."></label>
-      <div class="btn-row">
-        <label class="grow">模型 <input id="pModel" placeholder="model name"></label>
-        <button id="btnModels" class="btn small">拉取模型</button>
+    <!-- 自动触发 -->
+    <section class="card">
+      <h3>自动触发 <span class="card-sub">像素差异 → 稳定 → 自动答题</span></h3>
+      <label class="switch-row">
+        <span class="switch-text">启用自动答题</span>
+        <input type="checkbox" id="autoEnabled"><span class="slider"></span>
+      </label>
+      <div class="slider-group">
+        <label>灵敏度 <output id="vThreshold"></output></label>
+        <input type="range" id="autoThreshold" min="1" max="20" step="0.5">
+        <label>稳定等待 <output id="vStable"></output></label>
+        <input type="range" id="autoStable" min="0.5" max="5" step="0.5">
+        <label>冷却时间 <output id="vCooldown"></output></label>
+        <input type="range" id="autoCooldown" min="2" max="30" step="1">
       </div>
-      <div id="modelList" class="model-list hidden"></div>
-    </div>
-    <div id="directCfg" class="hidden">
-      <div class="muted small">直连模式：API Key 只保存在本手机浏览器中，不会发给考试电脑。</div>
-      <label>供应商 <select id="dProvider"></select></label>
-      <label>Base URL <input id="dBase" placeholder="https://..."></label>
-      <label>API Key <input id="dKey" type="password" placeholder="sk-..."></label>
-      <label>模型 <input id="dModel" placeholder="model name"></label>
-    </div>
-    <label>答题场景 <select id="sceneSel"></select></label>
-    <button id="btnSaveCfg" class="btn primary block">保存设置</button>
-  </section>
+      <p class="hint">灵敏度越高越不容易误触发；稳定等待=画面停止变化多久后才截图；冷却=两次自动答题的最小间隔。</p>
+    </section>
 
-  <!-- 对话 -->
-  <section class="card">
-    <div class="card-title">问答 <button id="btnClearChat" class="btn tiny ghost">清空</button></div>
-    <div id="answers"></div>
-    <div class="ask-row">
-      <input id="askInput" placeholder="追问 / 补充说明…">
-      <button id="btnAsk" class="btn primary">发送</button>
-    </div>
-    <button id="btnAbort" class="btn danger hidden">停止生成</button>
-  </section>
+    <!-- AI 模型 -->
+    <section class="card">
+      <h3>AI 模型</h3>
+      <div class="seg" id="modeSeg">
+        <button data-mode="proxy" class="seg-btn">代理（服务端）</button>
+        <button data-mode="direct" class="seg-btn">直连（本机）</button>
+      </div>
 
-  <section class="card danger-zone">
-    <button id="btnShutdown" class="btn danger block">关闭服务</button>
-    <div class="muted small">关闭后需在考试电脑上重新运行 service.py</div>
-  </section>
+      <div id="proxyCfg">
+        <label class="field">配置档案
+          <select id="pProfile"></select>
+        </label>
+        <label class="field">供应商
+          <select id="pProvider"></select>
+        </label>
+        <label class="field">Base URL
+          <input id="pBase" placeholder="https://..." autocomplete="off">
+        </label>
+        <label class="field">API Key
+          <input id="pKey" type="password" placeholder="sk-..." autocomplete="off">
+        </label>
+        <div class="field-row">
+          <label class="field grow">模型
+            <input id="pModel" placeholder="model name" autocomplete="off">
+          </label>
+          <button id="btnModels" class="btn small">拉取</button>
+        </div>
+        <div id="modelList" class="model-list hidden"></div>
+        <p class="hint">档案的 Key 存在服务端 config.json；直连模式的 Key 只保存在本机浏览器。</p>
+      </div>
+
+      <div id="directCfg" class="hidden">
+        <label class="field">供应商
+          <select id="dProvider"></select>
+        </label>
+        <label class="field">Base URL
+          <input id="dBase" placeholder="https://..." autocomplete="off">
+        </label>
+        <label class="field">API Key
+          <input id="dKey" type="password" placeholder="sk-..." autocomplete="off">
+        </label>
+        <label class="field">模型
+          <input id="dModel" placeholder="model name" autocomplete="off">
+        </label>
+      </div>
+    </section>
+
+    <!-- 提示词 -->
+    <section class="card">
+      <h3>答题提示词</h3>
+      <label class="field">答题场景
+        <select id="sceneSel"></select>
+      </label>
+      <label class="field">全局自定义提示词 <span class="field-sub">（留空则用场景提示词）</span>
+        <textarea id="customPrompt" rows="3" placeholder="例如：你是资深面试官，请分步骤拆解这道题…"></textarea>
+      </label>
+      <label class="field">场景提示词（可编辑）
+        <textarea id="scenePrompt" rows="5"></textarea>
+      </label>
+      <div class="btn-row">
+        <button id="btnSavePrompt" class="btn small">保存提示词</button>
+        <button id="btnResetPrompt" class="btn ghost small">恢复默认</button>
+        <span id="promptBadge" class="badge-tag hidden">已自定义</span>
+      </div>
+      <p class="hint">优先级：全局自定义 &gt; 场景提示词 &gt; 内置默认。config.json 中 scenes / custom_prompt 可直接配置。</p>
+    </section>
+
+    <!-- 显示 -->
+    <section class="card">
+      <h3>显示</h3>
+      <label class="field">答题字号 <output id="vFontPx"></output>
+        <input type="range" id="fontRange" min="14" max="36" step="1">
+      </label>
+      <div class="btn-row">
+        <button class="btn font-preset" data-px="18">紧凑</button>
+        <button class="btn font-preset" data-px="22">标准</button>
+        <button class="btn font-preset" data-px="28">远距</button>
+        <button class="btn font-preset" data-px="34">超大</button>
+      </div>
+    </section>
+
+    <!-- 保存与危险区 -->
+    <section class="card">
+      <button id="btnSaveCfg" class="btn primary block">保存全部设置</button>
+    </section>
+    <section class="card danger">
+      <button id="btnClearChat" class="btn ghost block">清空答题记录</button>
+      <button id="btnShutdown" class="btn danger block">关闭服务</button>
+      <p class="hint">关闭后需回到考试电脑重新运行 main.py。</p>
+    </section>
+    <div class="settings-foot muted">examlink · 局域网截图答题 · v0.1</div>
+  </div>
+</main>
+
+<!-- 图片放大查看 -->
+<div id="lightbox" class="lightbox hidden">
+  <img id="lightboxImg" alt="">
+  <div class="lightbox-bar"><button id="lightboxClose">关闭</button></div>
 </div>
+
 <div id="toast"></div>
 <script src="/app.js"></script>
 </body>

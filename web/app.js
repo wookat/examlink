@@ -1,14 +1,16 @@
-/* examlink phone UI. No dependencies; minimal markdown renderer. */
+/* examlink — hash-routed SPA. Live answer view + settings view. */
 "use strict";
 
 const $ = (s) => document.querySelector(s);
 const params = new URLSearchParams(location.search);
-const TOKEN = params.get("t") || params.get("token") || location.hash.slice(1) || "";
+let TOKEN = params.get("t") || params.get("token") || "";
+if (!TOKEN) {
+  const m = location.hash.match(/[#&?]t=([a-zA-Z0-9]+)/);
+  if (m) TOKEN = m[1];
+}
+const TOKEN_FINAL = TOKEN;
 
-const LS = {
-  mode: "examlink.mode",
-  d: "examlink.direct",   // {provider,base_url,api_key,model}
-};
+const LS = { mode: "examlink.mode", d: "examlink.direct", font: "examlink.fontpx" };
 
 const SCENES = {
   general: "你是一个答题助手。仔细看截图中的题目，直接给出准确、简洁的答案。选择题给出选项和理由，编程题给出思路和代码，简答题给出要点。不要寒暄。",
@@ -17,8 +19,8 @@ const SCENES = {
   english: "你是英语考试助手。分析截图中的英语题目（阅读/完形/翻译/作文），给出答案和必要的解释。作文题给出参考范文。",
   fill: "你是笔试答题助手。分析截图中的题目，给出可直接填写的答案。如果是填空题给出填空内容，如果是简答题给出条理清晰的答案要点。",
 };
+const SCENE_LABELS = { general: "通用问答", mcq: "选择题", code: "编程题", english: "英语考试", fill: "填空简答" };
 
-// provider presets mirrored from ai.py (direct mode needs them client-side)
 const PROVIDERS = {
   openai: { name: "OpenAI", base_url: "https://api.openai.com/v1", models: ["gpt-4o", "gpt-4o-mini", "gpt-5-mini"] },
   doubao: { name: "豆包 (火山方舟)", base_url: "https://ark.cn-beijing.volces.com/api/v3", models: ["doubao-seed-1-6-250615", "doubao-1-5-vision-pro-32k-250115", "doubao-1-5-vision-lite-32k-250115"] },
@@ -32,23 +34,25 @@ const PROVIDERS = {
 };
 
 // ---------------- state ----------------
-let ws = null, state = null;
+let ws = null, state = null, view = "live";
 let aiMode = localStorage.getItem(LS.mode) || "proxy";
 let directCfg = JSON.parse(localStorage.getItem(LS.d) || "{}");
 let directHistory = [];
-let pendingDirect = new Map();   // cardId -> {messages, card}
 let abortCtrl = null;
 let roiSelecting = false, roiStart = null;
+let fontPx = parseInt(localStorage.getItem(LS.font) || "20", 10);
+let previewLoaded = false;
 
 // ---------------- helpers ----------------
-function toast(msg, ms = 2200) {
+function toast(msg, ms = 2400) {
   const t = $("#toast"); t.textContent = msg; t.classList.add("show");
   clearTimeout(t._h); t._h = setTimeout(() => t.classList.remove("show"), ms);
 }
 function send(obj) { if (ws && ws.readyState === 1) ws.send(JSON.stringify(obj)); }
 function b64Of(dataUri) { return dataUri.slice(dataUri.indexOf(",") + 1); }
+function fmtTime() { const d = new Date(); return String(d.getHours()).padStart(2,"0")+":"+String(d.getMinutes()).padStart(2,"0"); }
 
-// minimal markdown: code blocks, inline code, bold, headers, lists, paragraphs
+// minimal markdown renderer
 function md(src) {
   const esc = s => s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
   let s = esc(src);
@@ -56,36 +60,67 @@ function md(src) {
   s = s.replace(/`([^`\n]+)`/g, "<code>$1</code>");
   s = s.replace(/\*\*([^*]+)\*\*/g, "<b>$1</b>");
   s = s.replace(/^######\s*(.+)$/gm, "<h6>$1</h6>")
-       .replace(/^###\s*(.+)$/gm, "<h5>$1</h5>")
-       .replace(/^##\s*(.+)$/gm, "<h4>$1</h4>")
+       .replace(/^###\s*(.+)$/gm, "<h4>$1</h4>")
+       .replace(/^##\s*(.+)$/gm, "<h3>$1</h3>")
        .replace(/^#\s*(.+)$/gm, "<h3>$1</h3>");
-  // lists
   s = s.replace(/((?:^\s*[-*]\s+.+\n?)+)/gm, m =>
     "<ul>" + m.replace(/^\s*[-*]\s+(.+)$/gm, "<li>$1</li>") + "</ul>");
   s = s.replace(/((?:^\s*\d+[.)]\s+.+\n?)+)/gm, m =>
     "<ol>" + m.replace(/^\s*\d+[.)]\s+(.+)$/gm, "<li>$1</li>") + "</ol>");
-  // paragraphs: wrap remaining lines not already in tags
-  s = s.split(/(<\/?(?:ul|ol|pre|h[3-6]|li|p|code|b)[^>]*>)/).map(part => {
+  s = s.split(/(<\/?(?:ul|ol|pre|h[3-6]|li|p|code|b|blockquote|table|th|td|tr)[^>]*>)/).map(part => {
     if (part.startsWith("<")) return part;
     return part.split(/\n{2,}/).map(p => p.trim() ? `<p>${p.replace(/\n/g, "<br>")}</p>` : "").join("");
   }).join("");
   return s;
 }
 
-// ---------------- answer cards ----------------
-function addCard({ id, image, trigger, tag }) {
-  const div = document.createElement("div");
-  div.className = "ans"; div.id = "card-" + id;
-  div.innerHTML = `<div class="meta"><span class="tag ${trigger === "auto" ? "auto" : ""}">${tag || trigger || ""}</span><span class="time"></span></div>`;
-  if (image) {
-    const img = document.createElement("img"); img.className = "shot"; img.src = image;
-    div.appendChild(img);
+// ---------------- font scaling ----------------
+function applyFont(px) {
+  fontPx = Math.min(36, Math.max(14, px));
+  document.documentElement.style.setProperty("--fs", fontPx + "px");
+  localStorage.setItem(LS.font, String(fontPx));
+  $("#fontPct").textContent = Math.round(fontPx / 20 * 100) + "%";
+  $("#fontRange") && ($("#fontRange").value = fontPx);
+  $("#vFontPx") && ($("#vFontPx").textContent = fontPx + "px");
+}
+$("#fontMinus").onclick = () => applyFont(fontPx - 2);
+$("#fontPlus").onclick = () => applyFont(fontPx + 2);
+
+// ---------------- router ----------------
+function route() {
+  const h = location.hash;
+  view = h.startsWith("#/settings") ? "settings" : "live";
+  $("#view-live").classList.toggle("hidden", view !== "live");
+  $("#view-settings").classList.toggle("hidden", view !== "settings");
+  if (view === "settings" && !previewLoaded) loadPreview();
+}
+window.addEventListener("hashchange", route);
+
+// ---------------- cards ----------------
+function ensureFeed() {
+  let f = $("#answers");
+  if (!f.querySelector(".ans") && !f.querySelector(".empty-feed")) {
+    f.innerHTML = `<div class="empty-feed"><div><div class="big">◈</div>截图或自动触发后，答案会显示在这里</div></div>`;
   }
-  const mdEl = document.createElement("div"); mdEl.className = "md";
-  div.appendChild(mdEl);
-  $("#answers").appendChild(div);
-  $("#answers").scrollTop = 1e9;
-  return { el: div, md: mdEl };
+}
+function scrollFeed() { const f = $("#answers"); f.scrollTop = f.scrollHeight; }
+
+function addCard({ id, image, trigger, tag }) {
+  const feed = $("#answers");
+  feed.querySelector(".empty-feed")?.remove();
+  const div = document.createElement("div");
+  div.className = "ans" + (tag === "err" ? " err-card" : ""); div.id = "card-" + id;
+  const cls = tag === "错误" ? "err" : trigger === "auto" ? "auto" : trigger === "ask" ? "ask" : "shot";
+  div.innerHTML = `<div class="ans-head"><span class="tag ${cls}">${tag || trigger || ""}</span><span class="ans-time">${fmtTime()}</span></div><div class="md"></div>`;
+  if (image) {
+    const img = document.createElement("img");
+    img.className = "shot-thumb"; img.src = image; img.loading = "lazy";
+    img.onclick = () => openLightbox(image);
+    div.querySelector(".ans-head").appendChild(img);
+  }
+  feed.appendChild(div);
+  scrollFeed();
+  return { el: div, md: div.querySelector(".md") };
 }
 function cardById(id) {
   const el = document.getElementById("card-" + id);
@@ -95,32 +130,41 @@ function setCardText(id, text, streaming) {
   const c = cardById(id); if (!c) return;
   c.md.innerHTML = md(text);
   c.el.classList.toggle("streaming", !!streaming);
-  c.el.scrollIntoView({ block: "nearest" });
-}
-function setCardMeta(id, txt) {
-  const c = cardById(id); if (!c) return;
-  c.el.querySelector(".time").textContent = txt;
+  scrollFeed();
 }
 function finishCard(id) { const c = cardById(id); if (c) c.el.classList.remove("streaming"); }
 function errCard(id, msg) {
-  const c = cardById(id) || addCard({ id: id || ("e" + Date.now()), image: null, trigger: "error" });
-  c.md.innerHTML = `<span style="color:#ff8a8a">${md(msg)}</span>`;
+  const c = cardById(id) || addCard({ id: id || ("e" + Date.now()), image: null, trigger: "err", tag: "错误" });
+  c.md.innerHTML = `<span style="color:var(--danger)">${md(msg)}</span>`;
   c.el.classList.remove("streaming");
 }
+
+function openLightbox(src) {
+  $("#lightboxImg").src = src;
+  $("#lightbox").classList.remove("hidden");
+}
+$("#lightboxClose").onclick = () => $("#lightbox").classList.add("hidden");
+$("#lightbox").onclick = (e) => { if (e.target.id === "lightbox") $("#lightbox").classList.add("hidden"); };
 
 // ---------------- websocket ----------------
 function connect() {
   const proto = location.protocol === "https:" ? "wss" : "ws";
-  ws = new WebSocket(`${proto}://${location.host}/ws?token=${encodeURIComponent(TOKEN)}`);
-  ws.onopen = () => { setConn("on", "已连接"); };
-  ws.onclose = () => { setConn("err", "断开"); setTimeout(connect, 2000); };
-  ws.onerror = () => setConn("err", "错误");
+  ws = new WebSocket(`${proto}://${location.host}/ws?token=${encodeURIComponent(TOKEN_FINAL)}`);
+  ws.onopen = () => setConn("on", "已连接");
+  ws.onclose = () => { setConn("err", "已断开"); setTimeout(connect, 2000); };
+  ws.onerror = () => setConn("err", "连接错误");
   ws.onmessage = (ev) => {
     let m; try { m = JSON.parse(ev.data); } catch { return; }
     handle(m);
   };
 }
-function setConn(cls, txt) { $("#connDot").className = cls; $("#connText").textContent = txt; }
+function setConn(cls, txt) {
+  const c = "conn-dot " + cls;
+  $("#connDot").className = c;
+  $("#connDot2").className = c;
+  $("#connText").textContent = txt;
+  $("#connBar").classList.toggle("hidden", cls === "on");
+}
 
 function handle(m) {
   switch (m.t) {
@@ -132,27 +176,28 @@ function handle(m) {
         c.el._text = (c.el._text || "") + m.text;
         setCardText(m.id, c.el._text, true);
       }
-      $("#btnAbort").classList.remove("hidden");
+      $("#busyDot")?.classList.remove("hidden");
+      $("#btnAbort")?.classList.remove("hidden");
       break;
     }
-    case "done": finishCard(m.id); $("#btnAbort").classList.add("hidden"); break;
-    case "error": toast(m.msg || "错误"); if (m.id) errCard(m.id, m.msg); $("#btnAbort").classList.add("hidden"); break;
-    case "status": if (m.stage === "idle") $("#btnAbort").classList.add("hidden"); break;
+    case "done": finishCard(m.id); $("#busyDot")?.classList.add("hidden"); $("#btnAbort")?.classList.add("hidden"); break;
+    case "error": toast(m.msg || "错误", 3500); if (m.id) errCard(m.id, m.msg); $("#busyDot")?.classList.add("hidden"); $("#btnAbort")?.classList.add("hidden"); break;
+    case "status": if (m.stage === "idle") { $("#busyDot")?.classList.add("hidden"); $("#btnAbort")?.classList.add("hidden"); } break;
     case "ask_ack": {
       const card = addCard({ id: m.id, image: null, trigger: "ask", tag: "追问" });
       card.el._text = "";
       setCardText(m.id, "⏳ 思考中…", true);
-      $("#btnAbort").classList.remove("hidden");
+      $("#busyDot")?.classList.remove("hidden");
+      $("#btnAbort")?.classList.remove("hidden");
       break;
     }
-    case "cleared": $("#answers").innerHTML = ""; break;
+    case "cleared": $("#answers").innerHTML = ""; ensureFeed(); break;
     case "bye": toast("服务已关闭"); break;
   }
 }
 
-// ---------------- capture handling ----------------
+// ---------------- capture ----------------
 function onCapture(m) {
-  // remember raw b64 for possible direct-mode reuse
   window._lastB64 = b64Of(m.image);
   if (aiMode === "direct" && m.ask) {
     directAsk({ images: [window._lastB64], q: "", newConv: true, trigger: m.trigger, image: m.image });
@@ -160,21 +205,21 @@ function onCapture(m) {
     const tag = m.trigger === "auto" ? "自动截图" : (m.ask ? "AI答题" : "截图");
     const card = addCard({ id: m.id, image: m.image, trigger: m.trigger, tag });
     card.el._text = "";
-    if (!m.ask) setCardText(m.id, "（仅截图，未请求 AI）", false);
+    if (!m.ask) { setCardText(m.id, "（仅截图，未请求 AI）", false); card.el.querySelector(".tag").textContent = "截图"; card.el.querySelector(".tag").className = "tag shot"; }
     if (m.ask && aiMode === "proxy") {
-      // server streams chunks into this card id
       setCardText(m.id, "⏳ 思考中…", true);
-      $("#btnAbort").classList.remove("hidden");
+      $("#busyDot")?.classList.remove("hidden");
+      $("#btnAbort")?.classList.remove("hidden");
     }
   }
 }
 
-// ---------------- direct mode (browser -> provider) ----------------
+// ---------------- direct mode ----------------
 async function directChat({ messages, cardId, onText }) {
   const cfg = effectiveDirectCfg();
   if (!cfg.base_url || !cfg.model) {
     toast("直连模式未配置 Base URL/模型");
-    errCard(cardId, "未配置模型：请在「AI 模型 → 直连」中填写 Base URL 和模型");
+    errCard(cardId, "未配置模型：请在 设置 → AI 模型 → 直连 中填写");
     return;
   }
   abortCtrl = new AbortController();
@@ -208,11 +253,12 @@ async function directChat({ messages, cardId, onText }) {
       }
     }
   } catch (e) {
-    if (e.name !== "AbortError") { toast("直连请求失败: " + e.message); errCard(cardId, "请求失败: " + e.message); }
+    if (e.name !== "AbortError") { toast("直连请求失败: " + e.message, 3500); errCard(cardId, "请求失败: " + e.message); }
   } finally {
     abortCtrl = null;
     onText(full, false);
-    $("#btnAbort").classList.add("hidden");
+    $("#busyDot")?.classList.add("hidden");
+    $("#btnAbort")?.classList.add("hidden");
   }
 }
 
@@ -225,12 +271,18 @@ function effectiveDirectCfg() {
   };
 }
 
+function clientScenePrompt() {
+  // mirror server resolve_prompt: custom_prompt > scene override > default
+  if (state?.custom_prompt) return state.custom_prompt;
+  const sid = state?.scene || "general";
+  return (state?.scenes && state.scenes[sid]) || SCENES[sid] || SCENES.general;
+}
+
 function directAsk({ images, q, newConv, trigger, image }) {
   const cfg = effectiveDirectCfg();
   if (newConv) directHistory = [];
-  const scene = SCENES[state?.scene] || SCENES.general;
+  const scene = clientScenePrompt();
   const msgs = [{ role: "system", content: scene }];
-  // replay bounded history
   for (const h of directHistory.slice(-12)) msgs.push(h);
   const content = [];
   for (const b64 of images) content.push({ type: "image_url", image_url: { url: "data:image/jpeg;base64," + b64 } });
@@ -243,7 +295,8 @@ function directAsk({ images, q, newConv, trigger, image }) {
   const card = addCard({ id, image: image || (images.length ? "data:image/jpeg;base64," + images[0] : null), trigger, tag });
   card.el._text = "";
   setCardText(id, "⏳ 思考中…", true);
-  $("#btnAbort").classList.remove("hidden");
+  $("#busyDot")?.classList.remove("hidden");
+  $("#btnAbort")?.classList.remove("hidden");
   let lastFull = "";
   directChat({
     messages: msgs, cardId: id,
@@ -251,72 +304,83 @@ function directAsk({ images, q, newConv, trigger, image }) {
   }).then(() => {
     directHistory.push(userMsg, { role: "assistant", content: lastFull });
     while (directHistory.length > 16) directHistory.splice(0, 2);
-    pendingDirect.delete(id);
   });
 }
 
 // ---------------- state -> UI ----------------
 function onState(s) {
   state = s;
-  // preview
-  if (!$("#preview").src.includes("preview.mjpg")) {
-    $("#preview").src = `/preview.mjpg?token=${encodeURIComponent(TOKEN)}`;
+  // auto pill
+  const pill = $("#autoPill");
+  const a = s.auto || {};
+  pill.textContent = a.enabled ? "自动开" : "自动关";
+  pill.className = "pill " + (a.enabled ? (s.busy ? "pill-busy" : "pill-on") : "pill-off");
+  // settings fields
+  syncAutoUI(a);
+  $("#autoEnabled").checked = !!a.enabled;
+  syncMonitorUI(s);
+  syncSceneUI(s);
+  syncProxyUI(s);
+  syncPromptUI(s);
+  syncModeSeg();
+}
+
+function syncAutoUI(a) {
+  $("#autoThreshold").value = a.threshold ?? 5;
+  $("#autoStable").value = (a.stable_ms ?? 1500) / 1000;
+  $("#autoCooldown").value = a.cooldown_s ?? 8;
+  $("#vThreshold").textContent = (a.threshold ?? 5).toFixed(1);
+  $("#vStable").textContent = ((a.stable_ms ?? 1500) / 1000).toFixed(1) + "s";
+  $("#vCooldown").textContent = (a.cooldown_s ?? 8) + "s";
+}
+
+function syncMonitorUI(s) {
+  const ms = $("#monitorSel");
+  const mons = s.monitors || [];
+  if (ms.options.length !== mons.length + 1) {
+    ms.innerHTML = "";
+    const o0 = document.createElement("option"); o0.value = ""; o0.textContent = "自动（主屏）";
+    ms.appendChild(o0);
+    for (const m of mons) {
+      const o = document.createElement("option");
+      o.value = m.index;
+      o.textContent = `显示器 ${m.index} (${m.width}×${m.height})${m.primary ? " · 主屏" : ""}`;
+      ms.appendChild(o);
+    }
   }
-  // roi badge + box
+  ms.value = String(s.monitor ?? "");
+  // roi badge + box (in settings preview)
   const roi = s.roi;
   $("#roiBadge").classList.toggle("hidden", !roi);
   $("#btnClearRoi").classList.toggle("hidden", !roi);
   const box = $("#roiBox");
   if (roi) {
     box.classList.remove("hidden");
-    box.style.left = roi[0] * 100 + "%";
-    box.style.top = roi[1] * 100 + "%";
-    box.style.width = (roi[2] - roi[0]) * 100 + "%";
-    box.style.height = (roi[3] - roi[1]) * 100 + "%";
+    box.style.left = roi[0] * 100 + "%"; box.style.top = roi[1] * 100 + "%";
+    box.style.width = (roi[2] - roi[0]) * 100 + "%"; box.style.height = (roi[3] - roi[1]) * 100 + "%";
   } else box.classList.add("hidden");
-  // auto controls
-  const a = s.auto || {};
-  $("#autoEnabled").checked = !!a.enabled;
-  $("#autoThreshold").value = a.threshold ?? 5;
-  $("#autoStable").value = a.stable_ms ? a.stable_ms / 1000 : 1.5;
-  $("#autoCooldown").value = a.cooldown_s ?? 8;
-  syncAutoLabels();
-  $("#autoState").textContent = a.enabled ? "运行中" : "已关闭";
-  // monitor
-  const ms = $("#monitorSel");
-  if (ms.options.length !== (s.monitors || []).length + 1) {
-    ms.innerHTML = "";
-    const o0 = document.createElement("option"); o0.value = ""; o0.textContent = "自动（主屏）";
-    ms.appendChild(o0);
-    for (const m of s.monitors || []) {
-      const o = document.createElement("option");
-      o.value = m.index;
-      o.textContent = `显示器 ${m.index} (${m.width}×${m.height})${m.primary ? " 主屏" : ""}`;
-      ms.appendChild(o);
-    }
-  }
-  ms.value = String(s.monitor ?? "");
-  // scene
+}
+
+function syncSceneUI(s) {
   const ss = $("#sceneSel");
   if (!ss.options.length) {
-    for (const [id, prompt] of Object.entries(s.scenes || SCENES)) {
+    for (const [id] of Object.entries(s.scenes || SCENES)) {
       const o = document.createElement("option"); o.value = id;
-      o.textContent = { general: "通用问答", mcq: "选择题", code: "编程题", english: "英语考试", fill: "填空简答" }[id] || id;
+      o.textContent = SCENE_LABELS[id] || id;
       ss.appendChild(o);
     }
   }
   ss.value = s.scene || "general";
-  // proxy form (fill once / when not focused)
-  if (!$("#pKey").value && !document.activeElement.matches("#pKey,#pBase,#pModel")) {
-    // don't overwrite user typing; server doesn't send secrets back anyway
-  }
+  refreshScenePrompt();
+}
+
+function syncProxyUI(s) {
   $("#pProvider").value = (s.proxy && s.proxy.provider) || "custom";
-  // profiles
   const ps = $("#pProfile");
   const profs = s.profiles || {};
   if (ps.options.length !== Object.keys(profs).length + 1) {
     ps.innerHTML = "";
-    const o0 = document.createElement("option"); o0.value = ""; o0.textContent = "自定义/手动";
+    const o0 = document.createElement("option"); o0.value = ""; o0.textContent = "自定义 / 手动";
     ps.appendChild(o0);
     for (const [n, p] of Object.entries(profs)) {
       const o = document.createElement("option"); o.value = n;
@@ -325,32 +389,36 @@ function onState(s) {
     }
   }
   ps.value = s.active_profile || "";
-  syncSeg();
 }
 
-function syncAutoLabels() {
-  $("#vThreshold").textContent = $("#autoThreshold").value;
-  $("#vStable").textContent = $("#autoStable").value + "s";
-  $("#vCooldown").textContent = $("#autoCooldown").value + "s";
+function syncPromptUI(s) {
+  $("#customPrompt").value = s.custom_prompt || "";
+  $("#promptBadge").classList.toggle("hidden", !(s.custom_prompt || (s.scene_overrides || []).length));
 }
 
-// ---------------- settings UI ----------------
-function fillProviderSelect(sel, providers) {
-  sel.innerHTML = "";
-  for (const [id, p] of Object.entries(providers)) {
-    const o = document.createElement("option"); o.value = id; o.textContent = p.name || id;
-    sel.appendChild(o);
-  }
+function refreshScenePrompt() {
+  const sid = $("#sceneSel").value || "general";
+  const prompt = (state?.scenes && state.scenes[sid]) || SCENES[sid] || "";
+  $("#scenePrompt").value = prompt;
 }
-function syncSeg() {
+
+function syncModeSeg() {
   document.querySelectorAll("#modeSeg .seg-btn").forEach(b =>
     b.classList.toggle("active", b.dataset.mode === aiMode));
-  $("#proxyCfg").classList.toggle("hidden", aiMode !== "proxy");
-  $("#directCfg").classList.toggle("hidden", aiMode !== "direct");
+  $("#proxyCfg")?.classList.toggle("hidden", aiMode !== "proxy");
+  $("#directCfg")?.classList.toggle("hidden", aiMode !== "direct");
 }
 
-// ROI select via pointer events on preview wrap
-const wrap = $("#previewWrap");
+// ---------------- preview / ROI (settings view) ----------------
+function loadPreview() {
+  previewLoaded = true;
+  const img = $("#preview");
+  if (img && !img.src.includes("preview.mjpg")) {
+    img.src = `/preview.mjpg?token=${encodeURIComponent(TOKEN_FINAL)}`;
+  }
+}
+
+const wrap = $("#settingsPreviewWrap");
 function normPos(e) {
   const r = wrap.getBoundingClientRect();
   return [
@@ -388,36 +456,15 @@ function drawRoiTemp(a, b) {
   box.style.height = Math.abs(b[1] - a[1]) * 100 + "%";
 }
 
-// ---------------- wire events ----------------
+// ---------------- live view events ----------------
 $("#btnCapture").onclick = () => { send({ t: "capture", ask: true }); };
 $("#btnSnap").onclick = () => { send({ t: "capture", ask: false }); };
-$("#btnRoi").onclick = () => {
-  roiSelecting = true; $("#roiHint").classList.remove("hidden");
-  toast("在画面上拖动框选");
-};
-$("#btnClearRoi").onclick = () => send({ t: "set", patch: { roi: null } });
 $("#btnAsk").onclick = doAsk;
 $("#askInput").addEventListener("keydown", e => { if (e.key === "Enter") doAsk(); });
 $("#btnAbort").onclick = () => {
   if (aiMode === "direct" && abortCtrl) { abortCtrl.abort(); return; }
   send({ t: "abort" });
 };
-$("#btnClearChat").onclick = () => {
-  $("#answers").innerHTML = ""; directHistory = [];
-  send({ t: "clear" });
-};
-$("#btnShutdown").onclick = () => {
-  if (confirm("确定关闭 examlink 服务？考试电脑上需重新运行 service.py 才能恢复。")) send({ t: "shutdown" });
-};
-$("#btnSaveCfg").onclick = saveCfg;
-$("#btnModels").onclick = fetchModels;
-$("#modelList").onclick = (e) => { if (e.target.dataset.model) { $("#pModel").value = e.target.dataset.model; } };
-$("#pProfile").onchange = (e) => {
-  if (e.target.value) send({ t: "set", patch: { profile: e.target.value } });
-};
-// editing proxy fields manually => switch profile select to custom
-["#pBase", "#pKey", "#pModel", "#pProvider"].forEach(sel =>
-  $(sel).addEventListener("input", () => { $("#pProfile").value = ""; }));
 
 function doAsk() {
   const q = $("#askInput").value.trim();
@@ -426,20 +473,80 @@ function doAsk() {
   if (aiMode === "direct") {
     directAsk({ images: window._lastB64 ? [window._lastB64] : [], q, newConv: false });
   } else {
-    const id = "a" + Date.now().toString(36);
-    addCard({ id, image: null, trigger: "ask", tag: "追问" })._text = "";
     send({ t: "ask", q, new: false });
-    // server uses its own cid in ask_ack; simplest: rely on ask_ack card
-    document.getElementById("card-" + id)?.remove();
-    $("#btnAbort").classList.remove("hidden");
+    $("#busyDot")?.classList.remove("hidden");
+    $("#btnAbort")?.classList.remove("hidden");
   }
 }
+
+// ---------------- settings view events ----------------
+$("#btnRoi").onclick = () => { roiSelecting = true; $("#roiHint").classList.remove("hidden"); toast("在画面上拖动框选"); };
+$("#btnClearRoi").onclick = () => send({ t: "set", patch: { roi: null } });
+$("#autoEnabled").onchange = (e) => {
+  send({ t: "set", patch: { auto: { enabled: e.target.checked } } });
+  $("#autoPill").textContent = e.target.checked ? "自动开" : "自动关";
+  $("#autoPill").className = "pill " + (e.target.checked ? "pill-on" : "pill-off");
+};
+function bindAuto(id, key) {
+  $(id).addEventListener("input", syncAutoLabels);
+  $(id).addEventListener("change", () => {
+    let v = parseFloat($(id).value);
+    if (key === "stable_ms") v = Math.round(v * 1000);
+    send({ t: "set", patch: { auto: { [key]: v } } });
+  });
+}
+function syncAutoLabels() {
+  $("#vThreshold").textContent = parseFloat($("#autoThreshold").value).toFixed(1);
+  $("#vStable").textContent = parseFloat($("#autoStable").value).toFixed(1) + "s";
+  $("#vCooldown").textContent = $("#autoCooldown").value + "s";
+}
+bindAuto("#autoThreshold", "threshold");
+bindAuto("#autoStable", "stable_ms");
+bindAuto("#autoCooldown", "cooldown_s");
+$("#monitorSel").onchange = (e) => send({ t: "set", patch: { monitor: e.target.value === "" ? null : parseInt(e.target.value) } });
+$("#sceneSel").onchange = (e) => { send({ t: "set", patch: { scene: e.target.value } }); refreshScenePrompt(); };
+$("#fontRange").addEventListener("input", (e) => applyFont(parseInt(e.target.value, 10)));
+document.querySelectorAll(".font-preset").forEach(b => b.onclick = () => applyFont(parseInt(b.dataset.px, 10)));
+
+$("#modeSeg").addEventListener("click", (e) => {
+  const b = e.target.closest(".seg-btn"); if (!b) return;
+  aiMode = b.dataset.mode;
+  localStorage.setItem(LS.mode, aiMode);
+  syncModeSeg();
+});
+
+$("#btnSavePrompt").onclick = () => {
+  const sid = $("#sceneSel").value || "general";
+  const sceneText = $("#scenePrompt").value.trim();
+  const custom = $("#customPrompt").value.trim();
+  send({ t: "set", patch: { custom_prompt: custom, scenes: { [sid]: sceneText } } });
+  toast("提示词已保存");
+};
+$("#btnResetPrompt").onclick = () => {
+  const sid = $("#sceneSel").value || "general";
+  send({ t: "set", patch: { scenes: { [sid]: "" } } });
+  toast("已恢复该场景默认提示词");
+};
+
+$("#btnSaveCfg").onclick = saveCfg;
+$("#btnClearChat").onclick = () => {
+  $("#answers").innerHTML = ""; directHistory = []; ensureFeed();
+  send({ t: "clear" }); toast("记录已清空");
+};
+$("#btnShutdown").onclick = () => {
+  if (confirm("确定关闭 examlink 服务？需回电脑重新运行 main.py。")) send({ t: "shutdown" });
+};
+$("#btnModels").onclick = fetchModels;
+$("#modelList").onclick = (e) => { if (e.target.dataset.model) $("#pModel").value = e.target.dataset.model; };
+$("#pProfile").onchange = (e) => { if (e.target.value) send({ t: "set", patch: { profile: e.target.value } }); };
+["#pBase", "#pKey", "#pModel", "#pProvider"].forEach(sel =>
+  $(sel).addEventListener("input", () => { $("#pProfile").value = ""; }));
 
 function saveCfg() {
   const prof = $("#pProfile").value;
   const patch = { scene: $("#sceneSel").value, ai_mode: aiMode };
   if (prof) {
-    patch.profile = prof;   // profile wins; don't overwrite with stale form fields
+    patch.profile = prof;
   } else {
     patch.proxy = {
       provider: $("#pProvider").value,
@@ -449,7 +556,6 @@ function saveCfg() {
     };
   }
   send({ t: "set", patch });
-  // direct config stays local
   directCfg = {
     provider: $("#dProvider").value,
     base_url: $("#dBase").value.trim(),
@@ -479,36 +585,14 @@ async function fetchModels() {
   }
 }
 
-// auto sliders -> server
-function bindAuto(id, key, scale = 1) {
-  $(id).addEventListener("input", syncAutoLabels);
-  $(id).addEventListener("change", () => {
-    let v = parseFloat($(id).value);
-    if (key === "stable_ms") v = Math.round(v * 1000);
-    send({ t: "set", patch: { auto: { [key]: v } } });
-  });
+// provider selects + direct cfg init
+function fillProviderSelect(sel) {
+  sel.innerHTML = "";
+  for (const [id, p] of Object.entries(PROVIDERS)) {
+    const o = document.createElement("option"); o.value = id; o.textContent = p.name || id;
+    sel.appendChild(o);
+  }
 }
-bindAuto("#autoThreshold", "threshold");
-bindAuto("#autoStable", "stable_ms");
-bindAuto("#autoCooldown", "cooldown_s");
-$("#autoEnabled").onchange = (e) => {
-  send({ t: "set", patch: { auto: { enabled: e.target.checked } } });
-  $("#autoState").textContent = e.target.checked ? "运行中" : "已关闭";
-};
-$("#monitorSel").onchange = (e) => send({ t: "set", patch: { monitor: e.target.value === "" ? null : parseInt(e.target.value) } });
-$("#sceneSel").onchange = (e) => send({ t: "set", patch: { scene: e.target.value } });
-
-// mode seg
-$("#modeSeg").addEventListener("click", (e) => {
-  const b = e.target.closest(".seg-btn"); if (!b) return;
-  aiMode = b.dataset.mode;
-  localStorage.setItem(LS.mode, aiMode);
-  syncSeg();
-});
-
-// provider selects
-fillProviderSelect($("#pProvider"), PROVIDERS);
-fillProviderSelect($("#dProvider"), PROVIDERS);
 function onProvChange(sel, baseInp, modelInp) {
   sel.addEventListener("change", () => {
     const p = PROVIDERS[sel.value];
@@ -516,20 +600,23 @@ function onProvChange(sel, baseInp, modelInp) {
     if (p && p.models && p.models.length && !modelInp.value) modelInp.value = p.models[0];
   });
 }
+fillProviderSelect($("#pProvider"));
+fillProviderSelect($("#dProvider"));
 onProvChange($("#pProvider"), $("#pBase"), $("#pModel"));
 onProvChange($("#dProvider"), $("#dBase"), $("#dModel"));
-// load direct cfg
 (function initDirect() {
   $("#dProvider").value = directCfg.provider || "doubao";
   $("#dBase").value = directCfg.base_url || "";
   $("#dKey").value = directCfg.api_key || "";
   $("#dModel").value = directCfg.model || "";
-  // auto-fill preset if empty
   const p = PROVIDERS[$("#dProvider").value];
   if (p && !$("#dBase").value) $("#dBase").value = p.base_url;
   if (p && p.models && p.models[0] && !$("#dModel").value) $("#dModel").value = p.models[0];
 })();
 
-syncSeg();
-if (!TOKEN) toast("URL 缺少 token，请从电脑上显示的链接打开", 4000);
+// ---------------- boot ----------------
+applyFont(fontPx);
+ensureFeed();
+route();
+if (!TOKEN_FINAL) toast("URL 缺少 token，请从电脑上显示的链接打开", 4000);
 connect();

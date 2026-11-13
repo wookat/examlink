@@ -87,6 +87,24 @@ def ai_mode():
     return CFG.get("ai_mode") or ("proxy" if aimod.provider_cfg(CFG)["api_key"] else "direct")
 
 
+def resolve_prompt():
+    """custom_prompt > per-scene override > scene default."""
+    cp = (CFG.get("custom_prompt") or "").strip()
+    if cp:
+        return cp
+    scene = CFG.get("scene", "general")
+    overrides = CFG.get("scenes") or {}
+    if scene in overrides and overrides[scene]:
+        return overrides[scene]
+    return aimod.SCENES.get(scene, aimod.SCENES["general"])
+
+
+def effective_scenes():
+    """scene_id -> effective prompt (override or default)."""
+    overrides = CFG.get("scenes") or {}
+    return {sid: (overrides.get(sid) or prompt) for sid, prompt in aimod.SCENES.items()}
+
+
 def public_state():
     pc = aimod.provider_cfg(CFG)
     mon = cap.monitors()[cap.effective_index(CFG.get("monitor"))]
@@ -100,6 +118,8 @@ def public_state():
         "roi": CFG.get("roi"),
         "auto": CFG.get("auto", {}),
         "scene": CFG.get("scene", "general"),
+        "custom_prompt": CFG.get("custom_prompt", ""),
+        "scene_overrides": [k for k, v in (CFG.get("scenes") or {}).items() if v],
         "ai_mode": ai_mode(),
         "proxy": {"provider": pc["name"], "model": pc["model"], "configured": bool(pc["api_key"] and pc["base_url"] and pc["model"])},
         "active_profile": CFG.get("active_profile"),
@@ -108,7 +128,7 @@ def public_state():
         "busy": STATE["busy"],
         "providers": {k: {"name": v["name"], "base_url": v["base_url"], "models": v["models"]}
                       for k, v in aimod.PROVIDERS.items()},
-        "scenes": aimod.SCENES,
+        "scenes": effective_scenes(),
     }
 
 
@@ -188,7 +208,7 @@ async def run_ai(cid, image_b64s, question, new_conv=False):
         return
     if new_conv:
         HISTORY.clear()
-    system = {"role": "system", "content": aimod.scene_prompt(CFG.get("scene", "general"))}
+    system = {"role": "system", "content": resolve_prompt()}
     if not HISTORY or HISTORY[0].get("role") != "system":
         HISTORY.insert(0, system)
     else:
@@ -432,7 +452,14 @@ def apply_patch(patch):
             CFG.setdefault("auto", {}).update(v)
         elif k == "proxy" and isinstance(v, dict):
             CFG.setdefault("proxy", {}).update(v)
-        elif k in ("monitor", "roi", "scene", "ai_mode", "port", "jpeg_quality", "max_image_dim"):
+        elif k == "scenes" and isinstance(v, dict):
+            ov = CFG.setdefault("scenes", {})
+            for sid, prompt in v.items():
+                if prompt:
+                    ov[sid] = prompt
+                else:
+                    ov.pop(sid, None)
+        elif k in ("monitor", "roi", "scene", "ai_mode", "port", "jpeg_quality", "max_image_dim", "custom_prompt"):
             CFG[k] = v
     save_config(CFG)
     # restart watcher if poll params changed is unnecessary (read each loop)

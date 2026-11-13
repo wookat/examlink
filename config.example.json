@@ -23,5 +23,7 @@
   },
   "profiles": {},
   "ai_mode": "",
-  "scene": "general"
+  "scene": "general",
+  "custom_prompt": "",
+  "scenes": {}
 }
