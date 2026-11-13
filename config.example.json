@@ -1,0 +1,27 @@
+{
+  "port": 8791,
+  "token": "",
+  "monitor": null,
+  "jpeg_quality": 88,
+  "max_image_dim": 2000,
+  "roi": null,
+  "auto": {
+    "enabled": false,
+    "poll_ms": 900,
+    "stable_ms": 1500,
+    "cooldown_s": 8,
+    "threshold": 5.0,
+    "thumb_w": 96,
+    "thumb_h": 54
+  },
+  "proxy": {
+    "provider": "custom",
+    "base_url": "",
+    "api_key": "",
+    "model": "",
+    "custom_name": ""
+  },
+  "profiles": {},
+  "ai_mode": "",
+  "scene": "general"
+}

@@ -1,0 +1,105 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<title>examlink</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>📸</text></svg>">
+<link rel="stylesheet" href="/style.css">
+</head>
+<body>
+<div id="app">
+  <header>
+    <div class="h-title">examlink</div>
+    <div class="h-status"><span id="connDot"></span><span id="connText">连接中</span></div>
+  </header>
+
+  <!-- 画面预览 + 截图控制 -->
+  <section class="card">
+    <div class="card-title">实时画面 <span id="roiBadge" class="badge hidden"></span></div>
+    <div id="previewWrap">
+      <img id="preview" alt="preview">
+      <div id="roiBox" class="hidden"></div>
+      <div id="roiHint" class="hidden">拖动框选监控区域，松开完成</div>
+    </div>
+    <div class="btn-row">
+      <button id="btnCapture" class="btn primary">📸 截屏答题</button>
+      <button id="btnSnap" class="btn">仅截图</button>
+      <button id="btnRoi" class="btn">框选区域</button>
+      <button id="btnClearRoi" class="btn ghost hidden">清除ROI</button>
+    </div>
+    <div id="lastCap" class="lastcap hidden"></div>
+  </section>
+
+  <!-- 自动触发 -->
+  <section class="card">
+    <div class="card-title">自动触发</div>
+    <label class="switch-row">
+      <span>像素差异自动答题</span>
+      <input type="checkbox" id="autoEnabled"><span class="slider"></span>
+    </label>
+    <div class="grid2">
+      <label>灵敏度 <b id="vThreshold"></b></label>
+      <input type="range" id="autoThreshold" min="1" max="20" step="0.5">
+      <label>稳定等待 <b id="vStable"></b></label>
+      <input type="range" id="autoStable" min="0.5" max="5" step="0.5">
+      <label>冷却时间 <b id="vCooldown"></b></label>
+      <input type="range" id="autoCooldown" min="2" max="30" step="1">
+    </div>
+    <div class="btn-row">
+      <label class="inline">显示器
+        <select id="monitorSel"></select>
+      </label>
+      <span id="autoState" class="muted"></span>
+    </div>
+  </section>
+
+  <!-- AI 设置 -->
+  <section class="card">
+    <div class="card-title">AI 模型</div>
+    <div class="btn-row seg" id="modeSeg">
+      <button data-mode="proxy" class="btn seg-btn">代理(服务端)</button>
+      <button data-mode="direct" class="btn seg-btn">直连(本机)</button>
+    </div>
+    <div id="proxyCfg">
+      <label>配置档案 <select id="pProfile"></select></label>
+      <label>供应商 <select id="pProvider"></select></label>
+      <label>Base URL <input id="pBase" placeholder="https://..."></label>
+      <label>API Key <input id="pKey" type="password" placeholder="sk-..."></label>
+      <div class="btn-row">
+        <label class="grow">模型 <input id="pModel" placeholder="model name"></label>
+        <button id="btnModels" class="btn small">拉取模型</button>
+      </div>
+      <div id="modelList" class="model-list hidden"></div>
+    </div>
+    <div id="directCfg" class="hidden">
+      <div class="muted small">直连模式：API Key 只保存在本手机浏览器中，不会发给考试电脑。</div>
+      <label>供应商 <select id="dProvider"></select></label>
+      <label>Base URL <input id="dBase" placeholder="https://..."></label>
+      <label>API Key <input id="dKey" type="password" placeholder="sk-..."></label>
+      <label>模型 <input id="dModel" placeholder="model name"></label>
+    </div>
+    <label>答题场景 <select id="sceneSel"></select></label>
+    <button id="btnSaveCfg" class="btn primary block">保存设置</button>
+  </section>
+
+  <!-- 对话 -->
+  <section class="card">
+    <div class="card-title">问答 <button id="btnClearChat" class="btn tiny ghost">清空</button></div>
+    <div id="answers"></div>
+    <div class="ask-row">
+      <input id="askInput" placeholder="追问 / 补充说明…">
+      <button id="btnAsk" class="btn primary">发送</button>
+    </div>
+    <button id="btnAbort" class="btn danger hidden">停止生成</button>
+  </section>
+
+  <section class="card danger-zone">
+    <button id="btnShutdown" class="btn danger block">关闭服务</button>
+    <div class="muted small">关闭后需在考试电脑上重新运行 service.py</div>
+  </section>
+</div>
+<div id="toast"></div>
+<script src="/app.js"></script>
+</body>
+</html>
