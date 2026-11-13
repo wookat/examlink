@@ -1,0 +1,89 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>examlink</title>
+<link rel="stylesheet" href="panel.css">
+</head>
+<body>
+<header class="topbar">
+  <div class="brand"><span class="conn-dot" id="connDot"></span><span class="brand-name">examlink</span><span class="site-tag" id="siteTag"></span></div>
+  <div class="font-ctl">
+    <button id="fontMinus" class="icon-btn" title="缩小字体">−</button>
+    <span id="fontPct">100%</span>
+    <button id="fontPlus" class="icon-btn" title="放大字体">＋</button>
+  </div>
+  <button id="btnPop" class="icon-btn" title="弹出独立窗口">⧉</button>
+  <button id="btnCfg" class="icon-btn" title="设置">⚙</button>
+</header>
+
+<!-- settings -->
+<section id="cfg" class="cfg hidden">
+  <div class="group">
+    <h3>截图来源</h3>
+    <div class="seg" id="srcSeg">
+      <button class="seg-btn" data-src="examlink">examlink 服务</button>
+      <button class="seg-btn" data-src="tab">当前标签页</button>
+    </div>
+    <div id="srcExamlink">
+      <label class="fld"><span>服务地址</span><input id="exBase" placeholder="http://192.168.x.x:8791"></label>
+      <label class="fld"><span>Token</span><input id="exToken" placeholder="配对 token"></label>
+      <label class="chk"><input type="checkbox" id="exRoi"> 只截已配置的 ROI 区域</label>
+      <div class="row">
+        <button id="btnTest" class="btn sm">测试连接</button>
+        <button id="btnPeek" class="btn sm">预览一帧</button>
+      </div>
+      <div id="peekWrap" class="peek hidden"><img id="peekImg" alt=""></div>
+    </div>
+    <div id="srcTab" class="hidden">
+      <div class="hint">截取当前窗口可见标签页（chrome.tabs.captureVisibleTab）。适合把考试网页放在本浏览器中使用。</div>
+    </div>
+  </div>
+
+  <div class="group">
+    <h3>AI 网页</h3>
+    <div class="grid-sites" id="siteGrid"></div>
+    <label class="chk"><input type="checkbox" id="focusTab" checked> 答题时自动切换到 AI 标签页</label>
+    <label class="chk"><input type="checkbox" id="newChat"> 每次开新对话</label>
+  </div>
+
+  <div class="group">
+    <h3>提示词</h3>
+    <textarea id="prompt" rows="5" placeholder="发给 AI 的提示词，截图会一起附上"></textarea>
+    <div class="row">
+      <button id="btnPromptReset" class="btn sm">恢复默认</button>
+    </div>
+  </div>
+
+  <div class="group">
+    <h3>显示字号</h3>
+    <input type="range" id="fontRange" min="14" max="40" step="1" value="18">
+    <div class="row presets">
+      <button class="btn sm fp" data-px="15">15</button>
+      <button class="btn sm fp" data-px="18">18</button>
+      <button class="btn sm fp" data-px="22">22</button>
+      <button class="btn sm fp" data-px="28">28</button>
+      <button class="btn sm fp" data-px="34">34</button>
+    </div>
+  </div>
+</section>
+
+<!-- answer feed -->
+<main id="feed" class="feed">
+  <div class="empty-feed"><div><div class="big">◈</div>点击「截图答题」，答案显示在这里<br><span class="dim">侧边栏可拖宽 · 支持放大字号远距离查看</span></div></div>
+</main>
+
+<!-- bottom bar -->
+<footer class="inputbar">
+  <button id="btnSolve" class="btn primary">📷 截图答题</button>
+  <input id="askInput" placeholder="追问 / 额外说明…" />
+  <button id="btnAsk" class="btn">发送</button>
+</footer>
+
+<div id="toast"></div>
+<div id="lightbox" class="lightbox hidden"><button id="lightboxClose">✕</button><img id="lightboxImg" alt=""></div>
+
+<script src="panel.js"></script>
+</body>
+</html>

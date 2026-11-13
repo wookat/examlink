@@ -20,10 +20,27 @@ pythonw service.py  <──LAN/WS──>  浏览器打开网页
 
 ```bash
 pip install -r requirements.txt
-python service.py        # 或 pythonw service.py (Windows 无窗口)
+python main.py           # 或 pythonw main.py (Windows 无窗口)
 ```
 
 手机连同一 Wi-Fi，浏览器打开终端打印的 `http://<IP>:8791/?t=<token>` 链接（或 `/api/qr.png` 二维码）。
+
+## 浏览器扩展（extension/）— 免 API Key 模式
+
+MV3 扩展，不调用任何 API：**直接把截图+提示词投送到你已登录的 AI 网页**（ChatGPT / 豆包 / Gemini / DeepSeek / Kimi），抓回的回答在侧边栏大屏显示。
+
+```
+考试电脑/第二电脑                  AI 网页标签页（你已登录）
+examlink 服务 (可选, 截图源)
+  └─ /api/frame.jpg ──> 扩展后台 ──> 内容脚本贴图+输字+提交 ──> 答案流回侧边栏
+```
+
+安装：`chrome://extensions` → 开发者模式 → 加载已解压的扩展程序 → 选 `extension/` 目录。点工具栏图标开侧边栏。
+
+- **截图来源**：examlink 服务（`/api/frame.jpg`，可只截 ROI）或 当前可见标签页
+- **站点自动化**：文件输入/drop/paste 三种贴图策略 + ProseMirror 兼容输入 + 发送 → MutationObserver 抓回答案流
+- **大屏显示**：答案卡片大字渲染，字号 14–40px 无级调节，可弹出独立窗口放第二屏
+- 站点选择器会随 AI 网页改版失效——失效时改 `content/inject.js` 里的 `ADAPTERS` 选择器表
 
 ## 功能
 
@@ -47,6 +64,16 @@ python service.py        # 或 pythonw service.py (Windows 无窗口)
 | proxy.* | 代理模式 provider/base_url/api_key/model |
 | ai_mode | proxy / direct |
 | scene | 默认答题场景 |
+
+## HTTP API（供外部客户端/扩展使用）
+
+| 端点 | 说明 |
+|---|---|
+| `GET /api/state?token=` | 显示器/ROI/场景/提示词等状态 |
+| `GET /api/frame.jpg?token=[&roi=1]` | 单帧截图 JPEG（`roi=1` 按配置裁剪） |
+| `GET /preview.mjpg?token=` | MJPEG 实时预览流 |
+| `GET /api/qr.png?token=` | 配对链接二维码 |
+| `WS /ws?token=` | 双向命令/事件通道（capture/ask/set/abort/clear/shutdown） |
 
 ## 注意
 

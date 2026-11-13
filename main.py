@@ -318,14 +318,21 @@ async def api_state(request: Request):
 async def api_frame(request: Request):
     if not auth(request):
         return JSONResponse({"error": "bad token"}, status_code=403)
-    img = await asyncio.to_thread(grab_monitor_full)
+    use_roi = request.query_params.get("roi") == "1"
+    img = await asyncio.to_thread(grab_monitor_full, use_roi)
     b, w, h = cap.encode_jpeg(img, CFG.get("jpeg_quality", 88), CFG.get("max_image_dim", 2000))
     return Response(content=b, media_type="image/jpeg",
                     headers={"Cache-Control": "no-store"})
 
 
-def grab_monitor_full():
-    return cap.grab_monitor(cap.effective_index(CFG.get("monitor")))[0]
+def grab_monitor_full(use_roi=False):
+    img, mon = cap.grab_monitor(cap.effective_index(CFG.get("monitor")))
+    roi = CFG.get("roi")
+    if use_roi and roi:
+        rect = cap.norm_to_pixels(roi, mon)
+        if rect:
+            img = img.crop((rect[0], rect[1], rect[0] + rect[2], rect[1] + rect[3]))
+    return img
 
 
 @app.get("/preview.mjpg")
