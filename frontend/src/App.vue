@@ -34,7 +34,9 @@ watch(
     document.body.dataset.align = disp.align;
     document.body.dataset.contrast = disp.contrast;
     document.body.dataset.hero = disp.heroPos;
-    document.body.dataset.deck = disp.isNarrow ? "stack" : disp.deckDir; // narrow screens always stack
+    // narrow screens fall back to the stack — except the horizontal carousel,
+    // which is swipe-friendly and works at any width
+    document.body.dataset.deck = disp.isNarrow && disp.deckDir !== "carousel" ? "stack" : disp.deckDir;
     document.body.classList.toggle("comp-hide", disp.compMode === "float" && !disp.compPeeked);
     document.body.classList.toggle("latest-only", disp.latestOnly);
     document.body.classList.toggle("idx-mode", disp.index);

@@ -21,16 +21,16 @@ export interface DispState {
   fsA: number | null;
   fsM: number | null;
   heroPos: "left" | "right";  // giant letter side
-  deckDir: "stack" | "top" | "left" | "right"; // where the hero sits vs the history rail
+  deckDir: "stack" | "top" | "left" | "right" | "carousel"; // deck layout: stack / rail / horizontal carousel
   compMode: "pin" | "float";  // composer bar: always pinned vs auto-hover float
   dotOpen: boolean;           // dot panel open (session-only)
 }
 
 const DEFAULTS: DispState = {
-  v: 4, align: "center", cw: 80, contrast: "std", latestOnly: false,
+  v: 5, align: "center", cw: 80, contrast: "std", latestOnly: false,
   gaze: "", dot: false, wake: true, fold: true, index: true,
   fsH: null, fsT: null, fsA: null, fsM: null,
-  heroPos: "right", deckDir: "stack", compMode: "float", dotOpen: false,
+  heroPos: "right", deckDir: "carousel", compMode: "float", dotOpen: false,
 };
 
 const GAZE_PRESETS: Record<string, { align: DispState["align"]; cw: number; latestOnly?: boolean; font?: number }> = {
@@ -54,6 +54,7 @@ export const useDispStore = defineStore("disp", {
         s.compMode = (saved as any).compHide === false ? "pin" : "float";
         s.v = 4;
       }
+      if ((saved.v || 0) < 5) { s.deckDir = "carousel"; s.v = 5; }
       delete (s as any).compHide;
     } catch {}
     s.dotOpen = false;

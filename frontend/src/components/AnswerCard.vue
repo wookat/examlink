@@ -14,6 +14,7 @@ const props = defineProps<{
   indexMode: boolean;
   onDeck: boolean;
   railItem?: boolean;   // compact row inside the history rail (rail layout)
+  caro?: boolean;       // carousel hero variant: shot → question → 18题C token → detail
 }>();
 
 const ui = useUiStore();
@@ -33,6 +34,7 @@ const cls = computed(() => ({
   "below": props.indexMode && props.depth < 0,   // newer than focus → peeks below hero
   "deck-off": props.indexMode && !props.onDeck,
   "rail-item": props.railItem,
+  "caro-hero": props.caro,
   "err-card": props.card.error,
   "streaming": props.card.streaming,
   "has-hero": !!props.card.answer,
@@ -40,6 +42,12 @@ const cls = computed(() => ({
 }));
 
 const bodyHtml = computed(() => md(cards.bodyText(props.card)));
+
+/* digits-only question number for the "18题C" token (qno may carry 第/题) */
+const qnDisp = computed(() => {
+  const raw = props.card.qno || (props.card.qnum != null ? String(props.card.qnum) : "");
+  return raw.replace(/[^\d]/g, "");
+});
 
 function flip() { props.card.detailOpen = !props.card.detailOpen; }
 
@@ -75,20 +83,37 @@ function onPeekClick(e: MouseEvent) {
 
     <div v-if="card.title && !card.answer" class="ans-sub">{{ card.title }}</div>
 
-    <div v-if="card.answer" class="qrow" @click="flip">
-      <div class="qinfo">
-        <div v-if="card.title" class="ans-sub">{{ card.title }}</div>
-        <img v-if="card.image" class="shot-thumb" :src="card.image" loading="lazy"
-             @click.stop="ui.openLightbox(card.image!)" alt="截图">
+    <!-- carousel hero: shot band → question → 18题C token → 解析 toggle -->
+    <template v-if="caro && card.answer">
+      <img v-if="card.image" class="shot-band" :src="card.image" loading="lazy"
+           @click.stop="ui.openLightbox(card.image!)" alt="截图">
+      <div v-if="card.title" class="ans-sub">{{ card.title }}</div>
+      <div class="qatok" :class="{ 'text-ans': card.textAns }" @click="flip">
+        <template v-if="qnDisp"><span class="qt-n">{{ qnDisp }}</span><span class="qt-t">题</span></template>
+        <span class="qt-a">{{ card.answerLetter }}</span>
+        <span v-if="card.answerRest" class="qt-r">{{ card.answerRest }}</span>
       </div>
-      <div class="qbig" :class="{ 'text-ans': card.textAns }">
-        <span class="ql">{{ card.answerLetter }}</span>
-        <span class="qr">{{ card.answerRest }}</span>
+      <button class="detail-toggle" @click.stop="flip">
+        {{ card.detailOpen ? "收起解析 ▴" : "解析 ▾" }}
+      </button>
+    </template>
+
+    <template v-else>
+      <div v-if="card.answer" class="qrow" @click="flip">
+        <div class="qinfo">
+          <div v-if="card.title" class="ans-sub">{{ card.title }}</div>
+          <img v-if="card.image" class="shot-thumb" :src="card.image" loading="lazy"
+               @click.stop="ui.openLightbox(card.image!)" alt="截图">
+        </div>
+        <div class="qbig" :class="{ 'text-ans': card.textAns }">
+          <span class="ql">{{ card.answerLetter }}</span>
+          <span class="qr">{{ card.answerRest }}</span>
+        </div>
       </div>
-    </div>
-    <button v-if="card.answer" class="detail-toggle" @click.stop="flip">
-      {{ card.detailOpen ? "收起解析 ▴" : "解析 ▾" }}
-    </button>
+      <button v-if="card.answer" class="detail-toggle" @click.stop="flip">
+        {{ card.detailOpen ? "收起解析 ▴" : "解析 ▾" }}
+      </button>
+    </template>
 
     <div class="md" :class="{ 'md-err': card.error }" v-html="bodyHtml"></div>
     <div v-if="card.stopped" class="stopped-note">已停止（部分内容）</div>

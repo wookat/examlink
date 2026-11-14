@@ -6,7 +6,7 @@ const disp = useDispStore();
 const gazeOpts = [["left", "← 左侧视"], ["front", "正视"], ["right", "右侧视 →"], ["far", "远视"]];
 const alignOpts = [["left", "靠左"], ["center", "居中"], ["right", "靠右"]];
 const heroOpts = [["right", "在右"], ["left", "在左"]];
-const deckOpts = [["stack", "叠放"], ["top", "重点在上"], ["left", "重点在左"], ["right", "重点在右"]];
+const deckOpts = [["carousel", "横向轮播"], ["stack", "叠放"], ["top", "重点在上"], ["left", "重点在左"], ["right", "重点在右"]];
 const fontPresets = [[18, "紧凑"], [22, "标准"], [28, "远距"], [34, "超大"]];
 </script>
 
@@ -31,7 +31,7 @@ const fontPresets = [[18, "紧凑"], [22, "标准"], [28, "远距"], [34, "超�
                 :class="{ active: disp.heroPos === h }" @click="disp.patch({ heroPos: h as any })">{{ l }}</button>
       </div>
     </label>
-    <label class="field">屏幕重点方向 <span class="field-sub">当前题在指定侧放大显示，历史题收在另一侧（需开答案索引；窄屏自动叠放）</span>
+    <label class="field">卡组方向 <span class="field-sub">横向轮播：当前题居中、相邻题露出左右答案；其余模式：当前题在指定侧放大，历史题收在另一侧（需开答案索引）</span>
       <div class="seg">
         <button v-for="[d, l] in deckOpts" :key="d" class="seg-btn"
                 :class="{ active: disp.deckDir === d }" @click="disp.patch({ deckDir: d as any })">{{ l }}</button>
