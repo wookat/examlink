@@ -381,6 +381,20 @@ body.idx-mode:not(.dot-open) .ans.q-hero {
 }
 body.idx-mode:not(.dot-open) .ans.cur-q { border-color: var(--accent); }
 
+/* deck-mode horizontal alignment — the whole stack (strips + hero) hugs an edge */
+@keyframes heroInL { from { opacity: 0; transform: translateY(18px); } to { opacity: 1; transform: none; } }
+body.idx-mode[data-align="left"]:not(.dot-open) .ans { left: var(--pad); transform: none; }
+body.idx-mode[data-align="right"]:not(.dot-open) .ans { left: auto; right: var(--pad); transform: none; }
+body.idx-mode[data-align="left"]:not(.dot-open) .ans.cur-q,
+body.idx-mode[data-align="right"]:not(.dot-open) .ans.cur-q { animation: heroInL .34s cubic-bezier(.2,.8,.25,1); }
+body.idx-mode[data-align="left"]:not(.dot-open) .ans.deck-off,
+body.idx-mode[data-align="right"]:not(.dot-open) .ans.deck-off { transform: translateY(48px) scale(.95); }
+/* rail-top mode: hero column follows the same alignment */
+body[data-deck="top"][data-align="left"].idx-mode:not(.dot-open) .feed.rail-mode .ans.q-hero,
+body[data-deck="top"][data-align="left"].idx-mode:not(.dot-open) .feed.rail-mode .rail { align-self: flex-start; margin-left: var(--pad); }
+body[data-deck="top"][data-align="right"].idx-mode:not(.dot-open) .feed.rail-mode .ans.q-hero,
+body[data-deck="top"][data-align="right"].idx-mode:not(.dot-open) .feed.rail-mode .rail { align-self: flex-end; margin-right: var(--pad); }
+
 /* hero internals emphasised — the current question + answer are the focus */
 body.idx-mode:not(.dot-open) .ans.q-hero { padding: 20px 24px; }
 body.idx-mode:not(.dot-open) .ans.q-hero .ans-head { font-size: calc(var(--fs-m, 12px) * 1.06); }
@@ -420,7 +434,7 @@ body.idx-mode:not(.dot-open) .feed.rail-mode .ans.q-hero {
 }
 /* history rail: compact scrollable column of question rows */
 .feed.rail-mode .rail {
-  flex: 0 0 clamp(230px, 24vw, 340px); order: 0;
+  flex: 0 0 var(--rail-w, clamp(230px, 24vw, 340px)); order: 0;
   min-width: 0; min-height: 0; overflow-y: auto; overscroll-behavior: contain;
   display: flex; flex-direction: column; gap: 8px;
   scrollbar-width: thin; padding: 2px;
@@ -521,16 +535,22 @@ body[data-align="right"][data-deck="left"].idx-mode:not(.dot-open) .feed.rail-mo
   border: 1px solid var(--border);
 }
 
-/* column width drag handle — lives on the inner edge of the content column */
+/* card-width grip pill — floats on the hero card's inner edge */
 .wdrag {
-  position: fixed; top: calc(var(--topbar-h) + 8px); bottom: 120px; width: 14px;
-  z-index: 45; cursor: col-resize;
+  position: fixed; width: 16px; height: 52px; border-radius: 9px;
+  background: var(--card-solid); border: 1px solid var(--border-strong);
+  display: grid; place-items: center;
+  z-index: 45; cursor: col-resize; opacity: .5;
+  transition: opacity .15s, border-color .15s, transform .15s;
+  box-shadow: 0 4px 14px rgba(0,0,0,.4);
 }
 .wdrag::after {
-  content: ""; position: absolute; top: 0; bottom: 0; left: 6px; width: 2px;
-  background: var(--border-strong); opacity: 0; transition: opacity .15s;
+  content: ""; width: 6px; height: 22px;
+  border-left: 2px solid var(--faint); border-right: 2px solid var(--faint);
+  border-radius: 1px;
 }
-.wdrag:hover::after, .wdrag:active::after { opacity: 1; }
+.wdrag:hover, .wdrag:active { opacity: 1; border-color: var(--accent); }
+.wdrag:active { transform: scale(1.06); }
 @media (max-width: 700px) { .wdrag { display: none !important; } }
 body.dot-mode .wdrag { display: none; }
 
@@ -680,20 +700,41 @@ body.dot-mode.dot-open .dot-actions { display: flex; }
 .flash-fx.go { animation: doneFlash .7s ease-out; }
 @keyframes doneFlash { 0% { opacity: 1; } 100% { opacity: 0; } }
 
-/* live preview PIP panel on the answer view */
+/* live preview PIP — floating window: drag anywhere, resize via corner, ⤢ maximises */
 .live-panel {
-  position: fixed; left: 14px; bottom: calc(14px + env(safe-area-inset-bottom, 0px));
-  z-index: 56; width: min(320px, 46vw); aspect-ratio: 16/9;
-  border: 1px solid var(--border-strong); background: #000;
+  position: fixed; left: 14px; bottom: 14px; z-index: 56; width: 320px;
+  border: 1px solid var(--border-strong); border-radius: 8px; overflow: hidden;
+  background: #000; box-shadow: 0 14px 44px rgba(0,0,0,.6);
+  cursor: grab; touch-action: none;
 }
-.live-panel img { width: 100%; height: 100%; object-fit: contain; display: block; }
-.live-close {
-  position: absolute; top: 4px; right: 4px; width: 24px; height: 24px;
-  border: none; border-radius: 3px; background: rgba(0,0,0,.65); color: #fff;
-  font-size: 12px; cursor: pointer; line-height: 1;
+.live-panel:active { cursor: grabbing; }
+.live-head {
+  display: flex; align-items: center; gap: 4px;
+  padding: 5px 6px 5px 11px; background: #0c0c10;
+  border-bottom: 1px solid var(--border);
 }
+.live-head .t { flex: 1; font-size: 11px; font-weight: 600; color: var(--faint); letter-spacing: .04em; }
+.live-head button {
+  width: 23px; height: 23px; padding: 0; border: none; border-radius: var(--radius-xs);
+  display: grid; place-items: center; background: transparent; color: var(--faint); cursor: pointer;
+}
+.live-head button:hover { color: var(--text); background: rgba(255,255,255,.09); }
+.live-panel img { display: block; width: 100%; aspect-ratio: 16/9; object-fit: contain; background: #000; }
+.live-resize { position: absolute; right: 0; bottom: 0; width: 18px; height: 18px; cursor: nwse-resize; }
+.live-resize::after {
+  content: ""; position: absolute; right: 4px; bottom: 4px; width: 7px; height: 7px;
+  border-right: 2px solid var(--faint); border-bottom: 2px solid var(--faint); border-radius: 1px;
+}
+.live-resize:hover::after { border-color: var(--accent); }
+/* maximised: centred large stage, inline geo disabled via :style */
+.live-panel.live-max {
+  left: 50% !important; top: 50% !important; bottom: auto !important;
+  width: min(94vw, calc(92vh * 1.78)) !important;
+  transform: translate(-50%, -50%); z-index: 70;
+}
+.live-panel.live-max img { aspect-ratio: auto; max-height: 80vh; }
 body.dot-mode .live-panel { display: none; }
-@media (max-width: 480px) { .live-panel { width: 46vw; } }
+@media (max-width: 480px) { .live-panel { width: min(320px, 88vw); } }
 @media (max-width: 480px) {
   body.dot-mode.dot-open #answers { width: 100%; border-left: none; }
   body.dot-mode.dot-open #view-live .topbar { width: 100%; }
@@ -955,7 +996,7 @@ body[data-contrast="high"] .field textarea { border-width: 1.5px; }
 @media (max-width: 640px) {
   :root { --topbar-h: 46px; --pad: 10px; }
   .topbar { padding: 0 8px; gap: 6px; }
-  .brand-text, #fontPct, .topbar .busy-dot { display: none; }
+  .brand-text, #fontPct, .topbar .busy-dot, .topbar .align-ctl { display: none; }
   .icon-btn { width: 34px; height: 34px; }
   .fontctl { gap: 2px; }
   /* deck: near-full-width strips + compact hero */

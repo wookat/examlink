@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, ref } from "vue";
-import { Eye, Maximize, Minimize, Settings } from "@lucide/vue";
+import { Eye, Maximize, Minimize, Settings, AlignLeft, AlignCenter, AlignRight } from "@lucide/vue";
 import { useSessionStore } from "../stores/session";
 import { useDispStore } from "../stores/disp";
 import { useUiStore } from "../stores/ui";
@@ -11,6 +11,16 @@ const ui = useUiStore();
 
 const pillCls = computed(() =>
   "pill " + (session.autoOn ? (session.busy ? "pill-busy" : "pill-on") : "pill-off"));
+
+// quick cycle: hero/content column position (left → center → right)
+const ALIGN_CYCLE = ["left", "center", "right"] as const;
+const ALIGN_LABEL: Record<string, string> = { left: "靠左", center: "居中", right: "靠右" };
+const alignIcon = computed(() =>
+  disp.align === "left" ? AlignLeft : disp.align === "right" ? AlignRight : AlignCenter);
+function cycleAlign() {
+  const i = ALIGN_CYCLE.indexOf(disp.align);
+  disp.patch({ align: ALIGN_CYCLE[(i + 1) % 3] as any, gaze: "" });
+}
 
 // fullscreen
 const fsOn = ref(false);
@@ -46,6 +56,10 @@ onUnmounted(() => ["fullscreenchange", "webkitfullscreenchange"].forEach(ev => d
         {{ session.autoOn ? "自动开" : "自动关" }}
       </span>
       <span v-if="session.busy" class="busy-dot" title="AI 生成中"></span>
+      <button class="icon-btn align-ctl" :title="`内容位置：${ALIGN_LABEL[disp.align]}（点击切换）`"
+              :aria-label="'内容位置：' + ALIGN_LABEL[disp.align]" @click="cycleAlign">
+        <component :is="alignIcon" :size="18" />
+      </button>
       <div class="fontctl" title="字体大小">
         <button class="fc-btn" aria-label="减小字号" @click="disp.setFont(disp.fontPx - 2)">A−</button>
         <span>{{ disp.fontPct }}</span>

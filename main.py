@@ -506,6 +506,7 @@ async def _startup():
 # index.html itself and top-level files stay no-cache so updates always land
 DIST = BUNDLE / "frontend" / "dist"
 NC = {"Cache-Control": "no-cache"}
+NS = {"Cache-Control": "no-store"}
 IMMUTABLE = {"Cache-Control": "public, max-age=31536000, immutable"}
 
 # self-destructing service worker: browsers re-check /sw.js on navigation, so
@@ -524,7 +525,7 @@ self.addEventListener('activate', e => e.waitUntil((async () => {
 
 def _index_html() -> Response:
     return Response((DIST / "index.html").read_text(encoding="utf-8"),
-                    media_type="text/html", headers=NC)
+                    media_type="text/html", headers=NS)
 
 
 @app.get("/")
