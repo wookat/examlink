@@ -38,7 +38,7 @@ else:
     BUNDLE = BASE = Path(__file__).resolve().parent
 CONFIG_PATH = BASE / "config.json"
 KB_PATH = BASE / "knowledge.md"
-WEB = BUNDLE / "web"
+WEB = BUNDLE / "web"  # legacy static dir (unused; the SPA lives in frontend/dist)
 
 app = FastAPI()
 
@@ -502,52 +502,66 @@ async def _startup():
 
 # ---------------- HTTP ----------------
 
-# static assets ship inside the exe and change every release — no-cache makes
-# the browser revalidate each load (etag → cheap 304 when unchanged)
+# the SPA is a Vite build: hashed filenames under /assets make caching safe;
+# index.html itself and top-level files stay no-cache so updates always land
+DIST = BUNDLE / "frontend" / "dist"
 NC = {"Cache-Control": "no-cache"}
+IMMUTABLE = {"Cache-Control": "public, max-age=31536000, immutable"}
+
+# self-destructing service worker: browsers re-check /sw.js on navigation, so
+# clients still running the legacy cached frontend clean up and reload once
+SW_POISON = """
+self.addEventListener('install', () => self.skipWaiting());
+self.addEventListener('activate', e => e.waitUntil((async () => {
+  await self.registration.unregister();
+  const ks = await caches.keys();
+  await Promise.all(ks.map(k => caches.delete(k)));
+  const cs = await self.clients.matchAll({ type: 'window' });
+  cs.forEach(c => c.navigate(c.url));
+})()));
+"""
+
+
+def _index_html() -> Response:
+    return Response((DIST / "index.html").read_text(encoding="utf-8"),
+                    media_type="text/html", headers=NC)
 
 
 @app.get("/")
 async def index():
-    # __AV__ = asset version: style.css mtime inside the bundle — every exe
-    # rebuild produces a new value, so browsers always fetch fresh assets
-    html = (WEB / "index.html").read_text(encoding="utf-8").replace(
-        "__AV__", str(int((WEB / "style.css").stat().st_mtime)))
-    return Response(html, media_type="text/html", headers=NC)
+    return _index_html()
 
 
-@app.get("/app.js")
-async def app_js():
-    return FileResponse(WEB / "app.js", media_type="application/javascript", headers=NC)
-
-
-@app.get("/style.css")
-async def style_css():
-    return FileResponse(WEB / "style.css", media_type="text/css", headers=NC)
-
-
-@app.get("/manifest.webmanifest")
-async def manifest():
-    return FileResponse(WEB / "manifest.webmanifest", media_type="application/manifest+json", headers=NC)
+# SPA client-side routes (vue-router history mode)
+@app.get("/settings")
+async def spa_settings():
+    return _index_html()
 
 
 @app.get("/sw.js")
 async def service_worker():
-    return FileResponse(WEB / "sw.js", media_type="application/javascript", headers=NC)
+    return Response(SW_POISON, media_type="application/javascript", headers=NC)
+
+
+@app.get("/assets/{name}")
+async def asset_file(name: str):
+    p = (DIST / "assets" / name).resolve()
+    if not str(p).startswith(str(DIST.resolve())) or not p.is_file():
+        return JSONResponse({"error": "not found"}, status_code=404)
+    # vite emits content-hashed filenames — safe to cache forever
+    return FileResponse(p, headers=IMMUTABLE)
+
+
+@app.get("/manifest.webmanifest")
+async def manifest():
+    return FileResponse(DIST / "manifest.webmanifest",
+                        media_type="application/manifest+json", headers=NC)
 
 
 @app.get("/icons/{name}")
 async def icon_file(name: str):
-    p = (WEB / "icons" / name).resolve()
-    if not str(p).startswith(str(WEB.resolve())) or not p.exists():
-        return JSONResponse({"error": "not found"}, status_code=404)
-    return FileResponse(p, headers=NC)
-
-
-@app.get("/vendor/{name}")
-async def vendor_file(name: str):
-    p = (WEB / "vendor" / name).resolve()
-    if not str(p).startswith(str(WEB.resolve())) or not p.exists():
+    p = (DIST / "icons" / name).resolve()
+    if not str(p).startswith(str(DIST.resolve())) or not p.is_file():
         return JSONResponse({"error": "not found"}, status_code=404)
     return FileResponse(p, headers=NC)
 
