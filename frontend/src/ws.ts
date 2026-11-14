@@ -77,13 +77,13 @@ function handle(m: any) {
       break;
     case "capture": {
       ui.lastB64 = b64Of(m.image);
-      if (session.aiMode === "direct" && m.ask) {
+      if (session.aiMode === "direct" && m.ask && !m.kb) {
         directAsk({ images: [ui.lastB64], q: "", newConv: true, trigger: m.trigger, image: m.image });
       } else {
-        const tag = m.trigger === "auto" ? "自动截图" : (m.ask ? "AI答题" : "截图");
+        const tag = m.kb ? "知识库" : (m.trigger === "auto" ? "自动截图" : (m.ask ? "AI答题" : "截图"));
         const card = cards.newCard({ id: m.id, kind: "cap", trigger: m.trigger, tag, qnum: m.qnum, image: m.image });
         if (!m.ask) card.text = "（仅截图，未请求 AI）";
-        if (m.ask && session.aiMode === "proxy") { card.text = ""; card.streaming = true; session.busy = true; }
+        if (m.ask && !m.kb && session.aiMode === "proxy") { card.text = ""; card.streaming = true; session.busy = true; }
       }
       break;
     }

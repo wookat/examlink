@@ -136,7 +136,7 @@ export const useCardsStore = defineStore("cards", {
       this.replaying = true;
       for (const e of entries) {
         const isAsk = e.kind === "ask";
-        const tag = isAsk ? "追问" : (e.trigger === "auto" ? "自动截图" : (e.ask ? "AI答题" : "截图"));
+        const tag = isAsk ? "追问" : (e.kb ? "知识库" : (e.trigger === "auto" ? "自动截图" : (e.ask ? "AI答题" : "截图")));
         const c = this.newCard({
           id: e.id, kind: isAsk ? "ask" : "cap",
           trigger: isAsk ? "ask" : (e.trigger || "manual"), tag,

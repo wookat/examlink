@@ -19,6 +19,7 @@ export interface SettingsForm {
   verify: string; fallback: string;
   dProvider: string; dBase: string; dKey: string; dModel: string;
   kbAuto: boolean;
+  kbFirst: boolean;
 }
 // explicit annotation: deep reactive() literal inference degrades into
 // Ref<T> for trailing properties (template type-check bug)
@@ -31,12 +32,13 @@ export const form: SettingsForm = reactive<SettingsForm>({
   autoEnabled: false,
   threshold: 1.5, stable: 1.5, cooldown: 3,
   ocrQnum: true,
-  quality: 92, maxDim: 3000,
+  quality: 80, maxDim: 1600,
   profile: "",
   provider: "custom", pBase: "", pKey: "", pModel: "",
   verify: "", fallback: "",
   dProvider: "doubao", dBase: "", dKey: "", dModel: "",
   kbAuto: false,
+  kbFirst: true,
 });
 
 export const editing: Record<string, boolean> = reactive({});
@@ -60,13 +62,14 @@ export function initSettingsSync() {
     if (a.ocr_qnum !== undefined) form.ocrQnum = !!a.ocr_qnum;
     form.monitor = s.monitor ?? null;
     form.scene = s.scene || "general";
-    form.quality = s.jpeg_quality ?? 92;
-    form.maxDim = s.max_image_dim ?? 3000;
+    form.quality = s.jpeg_quality ?? 80;
+    form.maxDim = s.max_image_dim ?? 1600;
     form.profile = s.active_profile || "";
     form.provider = s.proxy?.provider || "custom";
     form.verify = s.verify_profile || "";
     form.fallback = s.fallback_profile || "";
     form.kbAuto = !!s.kb_auto_append;
+    form.kbFirst = s.kb_first !== false;
     if (!editing.scenePrompt) scenePromptFrom(s);
     if (!editing.customPrompt) form.customPrompt = s.custom_prompt || "";
     if (!editing.knowledge) form.knowledge = s.knowledge || "";

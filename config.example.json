@@ -2,8 +2,8 @@
   "port": 8791,
   "token": "",
   "monitor": null,
-  "jpeg_quality": 92,
-  "max_image_dim": 3000,
+  "jpeg_quality": 80,
+  "max_image_dim": 1600,
   "roi": null,
   "auto": {
     "enabled": false,

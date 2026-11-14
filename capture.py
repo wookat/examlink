@@ -8,6 +8,7 @@ Design borrowed from:
 
 import ctypes
 import io
+import re
 import threading
 import time
 
@@ -32,31 +33,40 @@ def _set_dpi_awareness():
 
 _set_dpi_awareness()
 
-_sct = mss.mss()
+# mss instances are NOT thread-safe — the watcher thread and asyncio
+# to_thread workers grab concurrently. One instance per thread.
+_tls = threading.local()
+
+
+def _sct_get():
+    sct = getattr(_tls, "sct", None)
+    if sct is None:
+        sct = _tls.sct = mss.mss()
+    return sct
 
 
 def monitors():
     """Return list of monitor dicts; index 0 is the 'all monitors' union."""
-    return _sct.monitors
+    return _sct_get().monitors
 
 
 def primary_monitor():
-    for i, m in enumerate(_sct.monitors):
+    for i, m in enumerate(_sct_get().monitors):
         if i > 0 and m.get("is_primary"):
             return m
-    return _sct.monitors[1] if len(_sct.monitors) > 1 else _sct.monitors[0]
+    return _sct_get().monitors[1] if len(_sct_get().monitors) > 1 else _sct_get().monitors[0]
 
 
 def primary_index():
-    for i, m in enumerate(_sct.monitors):
+    for i, m in enumerate(_sct_get().monitors):
         if i > 0 and m.get("is_primary"):
             return i
-    return 1 if len(_sct.monitors) > 1 else 0
+    return 1 if len(_sct_get().monitors) > 1 else 0
 
 
 def effective_index(monitor_index):
     """None/invalid -> primary monitor index."""
-    mons = _sct.monitors
+    mons = _sct_get().monitors
     if monitor_index and 1 <= int(monitor_index) < len(mons):
         return int(monitor_index)
     return primary_index()
@@ -71,14 +81,14 @@ def grab_monitor(monitor_index=1):
 
 def grab_monitor_shot(monitor_index=1):
     """Grab one monitor -> raw mss ScreenShot (keeps .bgra for zero-copy sampling)."""
-    mons = _sct.monitors
+    mons = _sct_get().monitors
     idx = monitor_index if 1 <= monitor_index < len(mons) else 1
     mon = mons[idx]
-    return _sct.grab(mon), mon
+    return _sct_get().grab(mon), mon
 
 
 def _region_box(monitor_index, rect):
-    mons = _sct.monitors
+    mons = _sct_get().monitors
     idx = monitor_index if 1 <= monitor_index < len(mons) else 1
     mon = mons[idx]
     return {
@@ -91,14 +101,14 @@ def _region_box(monitor_index, rect):
 
 def grab_region(monitor_index, rect):
     """Grab a sub-rect (left, top, w, h in physical px) of a monitor."""
-    shot = _sct.grab(_region_box(monitor_index, rect))
+    shot = _sct_get().grab(_region_box(monitor_index, rect))
     img = Image.frombytes("RGB", shot.size, shot.bgra, "raw", "BGRX")
     return img
 
 
 def grab_region_shot(monitor_index, rect):
     """Grab a sub-rect -> raw mss ScreenShot (zero-copy diff path)."""
-    return _sct.grab(_region_box(monitor_index, rect))
+    return _sct_get().grab(_region_box(monitor_index, rect))
 
 
 def norm_to_pixels(roi_norm, mon):
@@ -148,10 +158,104 @@ def sig_of_shot(shot, size=_SIG):
     return lum.astype(np.int16)
 
 
+def sig_of_frame(a, size=_SIG):
+    """Signature for a raw BGRA ndarray (DXGI frame). Same luma math."""
+    h, w = a.shape[:2]
+    ys = np.linspace(0, h - 1, size).astype(np.intp)
+    xs = np.linspace(0, w - 1, size).astype(np.intp)
+    sub = a[np.ix_(ys, xs)]
+    lum = (sub[:, :, 2].astype(np.uint32) * 77
+           + sub[:, :, 1].astype(np.uint32) * 150
+           + sub[:, :, 0].astype(np.uint32) * 29) >> 8
+    return lum.astype(np.int16)
+
+
 def sig_any(x, size=_SIG):
-    """Signature for either an mss ScreenShot or a PIL Image — identical
-    luma output on both paths so baselines stay comparable."""
-    return sig_of_shot(x, size) if hasattr(x, "bgra") else sig_of(x, size)
+    """Signature for mss ScreenShot / BGRA ndarray / PIL Image —
+    identical luma output on all paths so baselines stay comparable."""
+    if hasattr(x, "bgra"):
+        return sig_of_shot(x, size)
+    if isinstance(x, np.ndarray):
+        return sig_of_frame(x, size)
+    return sig_of(x, size)
+
+
+def shot_to_pil(x):
+    """mss ScreenShot | BGRA ndarray -> PIL RGB image."""
+    if hasattr(x, "bgra"):
+        return Image.frombytes("RGB", x.size, x.bgra, "raw", "BGRX")
+    a = np.asarray(x)
+    return Image.fromarray(a[:, :, [2, 1, 0]])
+
+
+def shot_size(x):
+    """(w, h) for mss ScreenShot or ndarray frames."""
+    if hasattr(x, "bgra"):
+        w, h = x.size
+        return int(w), int(h)
+    a = np.asarray(x)
+    return int(a.shape[1]), int(a.shape[0])
+
+
+# ---------------- DXGI backend (optional, GPU-side duplication) ----------------
+# dxcam grab() is ~0.1ms on 4K vs ~50ms for mss BitBlt, and returns None
+# when the desktop produced no new frame — the watcher then knows the
+# screen is untouched without even computing a signature. Camera lives in
+# whichever thread grabs (watcher thread); mss stays the universal fallback.
+
+_dx_cam = None
+_dx_cam_out = None
+_dx_failed = False
+_dx_outputs = None
+
+_OUT_RE = re.compile(r"Output\[(\d+)\]:\s*Res:\((\d+),\s*(\d+)\)\s*Rot:\d+\s*Primary:(True|False)")
+
+
+def dxgi_outputs():
+    """[(output_idx, w, h, is_primary)] parsed from dxcam.output_info()."""
+    global _dx_outputs
+    if _dx_outputs is None:
+        _dx_outputs = []
+        try:
+            import dxcam
+            _dx_outputs = [
+                (int(m.group(1)), int(m.group(2)), int(m.group(3)), m.group(4) == "True")
+                for m in _OUT_RE.finditer(dxcam.output_info())
+            ]
+        except Exception:
+            _dx_failed = True
+    return _dx_outputs
+
+
+def dxgi_output_for(mon):
+    """Map an mss monitor dict to a dxcam output index: prefer the primary
+    flag, fall back to a resolution match."""
+    outs = dxgi_outputs()
+    if mon.get("is_primary"):
+        for o in outs:
+            if o[3]:
+                return o[0]
+    for o in outs:
+        if o[1] == mon["width"] and o[2] == mon["height"]:
+            return o[0]
+    return outs[0][0] if outs else None
+
+
+def dxgi_camera(output_idx):
+    global _dx_cam, _dx_cam_out, _dx_failed
+    if _dx_failed or output_idx is None:
+        return None
+    if _dx_cam is None or _dx_cam_out != output_idx:
+        try:
+            import dxcam
+            _dx_cam = dxcam.create(output_idx=output_idx, output_color="BGRA")
+            _dx_cam_out = output_idx if _dx_cam is not None else None
+            if _dx_cam is None:
+                _dx_failed = True
+        except Exception:
+            _dx_failed = True
+            _dx_cam = None
+    return _dx_cam
 
 
 def diff_ratio(a, b):
@@ -241,10 +345,17 @@ class DiffWatcher:
                 continue
             try:
                 img = self.grab_fn()
-                self.last_shot = img
-                self.last_shot_ts = time.time()
-                cur = self.thumb_fn(img)
                 now = time.time()
+                if img is None and self._prev is not None:
+                    # DXGI: no new frame produced == screen pixel-identical
+                    # to the previous one. Reuse the last signature — the
+                    # cheapest possible "still" signal there is.
+                    cur = self._prev
+                else:
+                    if img is not None:
+                        self.last_shot = img
+                        self.last_shot_ts = now
+                    cur = self.thumb_fn(img)
                 if self._prev is None:
                     self._prev = self._baseline = cur
                     self._still_since = now

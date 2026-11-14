@@ -27,6 +27,10 @@ function saveKb() {
       <span v-if="kbActive" class="badge-tag">已启用</span>
     </div>
     <label class="switch-row">
+      <span class="switch-text">同题秒回：画面与已答题完全一致时直接复用旧答案（不请求 AI）</span>
+      <NSwitch :value="form.kbFirst" @update:value="(v: any) => { session.set({ kb_first: v }); ui.show(v ? '相同题面将秒回历史答案' : '已关闭同题秒回'); }" />
+    </label>
+    <label class="switch-row">
       <span class="switch-text">答过的题自动收录进 knowledge.md（错题本自增）</span>
       <NSwitch :value="form.kbAuto" @update:value="(v: any) => { session.set({ kb_auto_append: v }); ui.show(v ? '答过的题将自动收录进 knowledge.md' : '已关闭自动收录'); }" />
     </label>

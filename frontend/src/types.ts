@@ -45,6 +45,8 @@ export interface ServerState {
   jpeg_quality: number;
   max_image_dim: number;
   kb_auto_append: boolean;
+  kb_first: boolean;
+  capture_backend: string;
   verify_profile: string;
   fallback_profile: string;
 }

@@ -97,6 +97,29 @@ def _hist_load():
         pass
 
 
+SIG_BY_CID = {}          # cid -> 64x64 luma sig (same-session kb_first index)
+_KB_FIRST_MAXDIFF = 0.05  # identical screens regrab at ~0.0; different
+                          # questions on the same platform run >0.3
+
+
+def kb_lookup(sig):
+    """Best pixel-match past capture that already has an answer.
+
+    Same question re-displayed (back-nav, re-shown screen) produces a
+    nearly identical luma signature — replay that answer instead of a
+    second AI round-trip. Same-session only: thumbnail-derived sigs are
+    too lossy to match safely."""
+    best, best_d = None, _KB_FIRST_MAXDIFF
+    for e in CARD_LOG:
+        s = SIG_BY_CID.get(e.get("id"))
+        if s is None or not e.get("answer"):
+            continue
+        d = cap.diff_ratio(sig, s)
+        if d < best_d:
+            best, best_d = e, d
+    return best
+
+
 def log_card(entry):
     CARD_LOG.append(entry)
     _hist_save()
@@ -268,9 +291,12 @@ def public_state():
         "hotkey": {"items": hk_items()},
         "hotkey_choices": hkmod.TRIGGER_CHOICES,
         "hotkey_actions": hkmod.ACTIONS,
-        "jpeg_quality": CFG.get("jpeg_quality", 92),
-        "max_image_dim": CFG.get("max_image_dim", 3000),
+        "jpeg_quality": CFG.get("jpeg_quality", 80),
+        "max_image_dim": CFG.get("max_image_dim", 1600),
         "kb_auto_append": bool(CFG.get("kb_auto_append")),
+        "kb_first": bool(CFG.get("kb_first", True)),
+        "capture_backend": CFG.get("capture_backend", "auto"),
+        "dxgi_active": bool(_DXGI["ok"]),
         "verify_profile": CFG.get("verify_profile", ""),
         "fallback_profile": CFG.get("fallback_profile", ""),
     }
@@ -310,20 +336,48 @@ def grab_current():
     return img
 
 
+_DXGI = {"cam": None, "tried": False, "ok": False}
+
+
 def grab_watch():
     """Grab just the watched area (ROI or full screen) for diffing.
 
-    Returns the raw mss ScreenShot — the watcher samples its signature
-    strided off the BGRA buffer (zero-copy), never materializing a PIL
-    image. That keeps each poll ~25MB of churn lighter than the old
-    PIL->ndarray path."""
+    Backend preference: DXGI duplication (GPU-side, ~0.1ms on 4K, reports
+    an unchanged screen as None) -> mss BitBlt fallback. Returns a raw
+    frame object (mss shot / BGRA ndarray / None) — never a PIL image —
+    so each poll touches ~16KB instead of ~25MB."""
     idx = cap.effective_index(CFG.get("monitor"))
     mon = cap.monitors()[idx] if idx < len(cap.monitors()) else cap.primary_monitor()
     roi = CFG.get("roi")
+    rect = None
     if roi:
-        rect = cap.norm_to_pixels(roi, mon)
-        if rect and rect[2] > 8 and rect[3] > 8:
-            return cap.grab_region_shot(idx, rect)
+        r = cap.norm_to_pixels(roi, mon)
+        if r and r[2] > 8 and r[3] > 8:
+            rect = r
+
+    if CFG.get("capture_backend", "auto") != "mss":
+        st = _DXGI
+        if not st["tried"]:
+            st["tried"] = True
+            st["cam"] = cap.dxgi_camera(cap.dxgi_output_for(mon))
+            st["ok"] = st["cam"] is not None
+        if st["ok"]:
+            try:
+                frame = st["cam"].grab()
+            except Exception:
+                frame = None
+                st["ok"] = False          # duplication lost (RDP/driver) -> mss
+            if frame is None and st["ok"]:
+                return None               # screen unchanged — free "still"
+            if frame is not None:
+                if (frame.shape[1], frame.shape[0]) == (mon["width"], mon["height"]):
+                    if rect:
+                        x, y, w, h = rect
+                        return frame[y:y + h, x:x + w]
+                    return frame
+                st["ok"] = False          # output-index mismatch -> mss
+    if rect:
+        return cap.grab_region_shot(idx, rect)
     return cap.grab_monitor_shot(idx)[0]
 
 
@@ -335,7 +389,8 @@ async def do_capture(trigger="manual", ask=True, question=""):
         img = await asyncio.to_thread(grab_current)
         if WATCHER:
             WATCHER.note_captured(img)   # rebase the auto detector on every capture
-        b64, w, h, datauri = cap.encode_jpeg_b64(img, CFG.get("jpeg_quality", 88), CFG.get("max_image_dim", 2000))
+        sig = cap.sig_any(img)
+        b64, w, h, datauri = cap.encode_jpeg_b64(img, CFG.get("jpeg_quality", 80), CFG.get("max_image_dim", 1600))
         STATE["qnum"] += 1
         if CFG.get("auto", {}).get("ocr_qnum", True):
             try:
@@ -347,10 +402,20 @@ async def do_capture(trigger="manual", ask=True, question=""):
         cid = uuid.uuid4().hex[:10]
         thumb = cap.encode_jpeg_b64(img, 55, 240)[3]
         STATE["last_capture"] = {"id": cid, "b64": b64, "w": w, "h": h, "ts": time.time()}
+        # kb_first: same question seen before (pixel-identical frame)?
+        # Replay its stored answer instantly — zero AI call, zero wait.
+        hit = kb_lookup(sig) if (ask and CFG.get("kb_first", True)) else None
         log_card({"id": cid, "kind": "cap", "trigger": trigger, "qnum": STATE["qnum"],
-                  "thumb": thumb, "ask": ask, "ts": time.time(), "answer": ""})
+                  "thumb": thumb, "ask": ask, "ts": time.time(),
+                  "answer": hit["answer"] if hit else "", "kb": bool(hit)})
+        SIG_BY_CID[cid] = sig
         await broadcast({"t": "capture", "id": cid, "image": datauri, "w": w, "h": h,
-                         "trigger": trigger, "ask": ask, "qnum": STATE["qnum"]})
+                         "trigger": trigger, "ask": ask, "qnum": STATE["qnum"],
+                         "kb": bool(hit)})
+        if hit:
+            await broadcast({"t": "chunk", "id": cid, "text": hit["answer"]})
+            await broadcast({"t": "done", "id": cid})
+            return
         if ask and ai_mode() == "proxy":
             if STATE["busy"]:
                 await broadcast({"t": "error", "msg": "AI 正在生成中，本次截图未送答", "id": cid})
@@ -590,7 +655,7 @@ async def api_frame(request: Request):
         return JSONResponse({"error": "bad token"}, status_code=403)
     use_roi = request.query_params.get("roi") == "1"
     img = await asyncio.to_thread(grab_monitor_full, use_roi)
-    b, w, h = cap.encode_jpeg(img, CFG.get("jpeg_quality", 88), CFG.get("max_image_dim", 2000))
+    b, w, h = cap.encode_jpeg(img, CFG.get("jpeg_quality", 80), CFG.get("max_image_dim", 1600))
     return Response(content=b, media_type="image/jpeg",
                     headers={"Cache-Control": "no-store"})
 
@@ -622,17 +687,18 @@ async def preview_mjpg(request: Request):
                 if shared is not None and time.time() - WATCHER.last_shot_ts < 1.5:
                     mon = cap.monitors()[cap.effective_index(CFG.get("monitor"))]
                     # a region (ROI) shot isn't a full-screen preview frame
-                    if shared.size[0] == mon["width"] and shared.size[1] == mon["height"]:
+                    sw, shh = cap.shot_size(shared)
+                    if sw == mon["width"] and shh == mon["height"]:
                         shot = shared
                 if shot is None:
                     shot = await asyncio.to_thread(
                         lambda: cap.grab_monitor_shot(cap.effective_index(CFG.get("monitor")))[0])
-                sig = cap.sig_of_shot(shot)
+                sig = cap.sig_any(shot)
                 # Screen didn't move -> keep the last frame on the wire,
                 # skip the resize+encode pass entirely.
                 if last_sig is None or cap.diff_ratio(sig, last_sig) > 0.004:
                     last_sig = sig
-                    img = Image.frombytes("RGB", shot.size, shot.bgra, "raw", "BGRX")
+                    img = cap.shot_to_pil(shot)
                     w, h = img.size
                     scale = min(1.0, 960 / w)
                     if scale < 1.0:
@@ -768,7 +834,7 @@ def apply_patch(patch):
             CFG["hotkey"] = v
             if HOTKEY:
                 HOTKEY.configure(hk_items())
-        elif k in ("monitor", "roi", "scene", "ai_mode", "port", "jpeg_quality", "max_image_dim", "custom_prompt", "knowledge", "kb_auto_append", "verify_profile", "fallback_profile"):
+        elif k in ("monitor", "roi", "scene", "ai_mode", "port", "capture_backend", "jpeg_quality", "max_image_dim", "custom_prompt", "knowledge", "kb_auto_append", "kb_first", "verify_profile", "fallback_profile"):
             CFG[k] = v
     save_config(CFG)
     # restart watcher if poll params changed is unnecessary (read each loop)

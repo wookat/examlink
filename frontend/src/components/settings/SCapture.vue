@@ -15,6 +15,12 @@ const session = useSessionStore();
       <NSelect :value="form.monitor ?? -1" :options="monitorOpts"
                @update:value="(v: any) => { form.monitor = v === -1 ? null : v; session.set({ monitor: form.monitor }); }" />
     </label>
+    <label class="field">抓帧引擎
+      <NSelect :value="session.state?.capture_backend || 'auto'"
+               :options="[{ label: '自动（DXGI 优先，异常回退 mss）', value: 'auto' },
+                          { label: '兼容模式 mss', value: 'mss' }]"
+               @update:value="(v: any) => session.set({ capture_backend: v })" />
+    </label>
     <div class="slider-group">
       <label>截图质量 <output>{{ form.quality }}%</output></label>
       <NSlider :value="form.quality" :min="60" :max="100" :step="1"

@@ -9,6 +9,18 @@ export default defineConfig({
   build: {
     outDir: "dist",
     chunkSizeWarningLimit: 1200,
+    rollupOptions: {
+      output: {
+        manualChunks(id) {
+          // vendor split: naive-ui (~300KB) only needed by settings + a few
+          // controls; keep it as a separately-cacheable chunk
+          if (id.includes("node_modules/naive-ui")) return "vendor-naive";
+          if (id.includes("node_modules/vue") || id.includes("node_modules/@vue") ||
+              id.includes("node_modules/pinia") || id.includes("node_modules/vue-router"))
+            return "vendor-vue";
+        },
+      },
+    },
   },
   server: {
     proxy: {

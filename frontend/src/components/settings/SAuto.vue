@@ -1,15 +1,52 @@
 <script setup lang="ts">
-import { NSlider, NSwitch } from "naive-ui";
+import { NButton, NSlider, NSwitch } from "naive-ui";
 import { useSessionStore } from "../../stores/session";
+import { useUiStore } from "../../stores/ui";
 import { form } from "./form";
 
 const session = useSessionStore();
+const ui = useUiStore();
 const setAuto = (patch: Record<string, any>) => session.set({ auto: patch });
+
+/* one-click resource presets — each applies a bundle across capture,
+   trigger and answer-image params in a single config patch */
+const PRESETS: Record<string, { label: string; desc: string; patch: Record<string, any> }> = {
+  eco: {
+    label: "低耗",
+    desc: "最省 CPU：适合考试机长期挂着",
+    patch: { auto: { poll_ms: 800, stable_ms: 1200, ocr_qnum: false },
+             jpeg_quality: 70, max_image_dim: 1200 },
+  },
+  bal: {
+    label: "均衡",
+    desc: "默认体验：触发快、占用低",
+    patch: { auto: { poll_ms: 400, stable_ms: 600, ocr_qnum: true },
+             jpeg_quality: 80, max_image_dim: 1600 },
+  },
+  fast: {
+    label: "灵敏",
+    desc: "最快响应：性能较强的机器",
+    patch: { auto: { poll_ms: 250, stable_ms: 400, ocr_qnum: true },
+             jpeg_quality: 88, max_image_dim: 2400 },
+  },
+};
+
+function applyPreset(name: string) {
+  const p = PRESETS[name];
+  if (!p) return;
+  session.set(p.patch);
+  ui.show(`已应用「${p.label}」预设`);
+}
 </script>
 
 <template>
   <section class="card">
     <h3>自动触发 <span class="card-sub">像素差异 → 稳定 → 自动答题</span></h3>
+    <div class="btn-row preset-row">
+      <NButton v-for="(p, k) in PRESETS" :key="k" size="small" :title="p.desc"
+               @click="applyPreset(k)">{{ p.label }}</NButton>
+      <span class="muted preset-tip">一键预设：检测频率 / OCR / 图像规格</span>
+    </div>
     <label class="switch-row">
       <span class="switch-text">启用自动答题</span>
       <NSwitch :value="form.autoEnabled" @update:value="(v: any) => setAuto({ enabled: v })" />
