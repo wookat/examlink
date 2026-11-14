@@ -502,29 +502,38 @@ async def _startup():
 
 # ---------------- HTTP ----------------
 
+# static assets ship inside the exe and change every release — no-cache makes
+# the browser revalidate each load (etag → cheap 304 when unchanged)
+NC = {"Cache-Control": "no-cache"}
+
+
 @app.get("/")
 async def index():
-    return FileResponse(WEB / "index.html")
+    # __AV__ = asset version: style.css mtime inside the bundle — every exe
+    # rebuild produces a new value, so browsers always fetch fresh assets
+    html = (WEB / "index.html").read_text(encoding="utf-8").replace(
+        "__AV__", str(int((WEB / "style.css").stat().st_mtime)))
+    return Response(html, media_type="text/html", headers=NC)
 
 
 @app.get("/app.js")
 async def app_js():
-    return FileResponse(WEB / "app.js", media_type="application/javascript")
+    return FileResponse(WEB / "app.js", media_type="application/javascript", headers=NC)
 
 
 @app.get("/style.css")
 async def style_css():
-    return FileResponse(WEB / "style.css", media_type="text/css")
+    return FileResponse(WEB / "style.css", media_type="text/css", headers=NC)
 
 
 @app.get("/manifest.webmanifest")
 async def manifest():
-    return FileResponse(WEB / "manifest.webmanifest", media_type="application/manifest+json")
+    return FileResponse(WEB / "manifest.webmanifest", media_type="application/manifest+json", headers=NC)
 
 
 @app.get("/sw.js")
 async def service_worker():
-    return FileResponse(WEB / "sw.js", media_type="application/javascript")
+    return FileResponse(WEB / "sw.js", media_type="application/javascript", headers=NC)
 
 
 @app.get("/icons/{name}")
@@ -532,7 +541,7 @@ async def icon_file(name: str):
     p = (WEB / "icons" / name).resolve()
     if not str(p).startswith(str(WEB.resolve())) or not p.exists():
         return JSONResponse({"error": "not found"}, status_code=404)
-    return FileResponse(p)
+    return FileResponse(p, headers=NC)
 
 
 @app.get("/vendor/{name}")
@@ -540,7 +549,7 @@ async def vendor_file(name: str):
     p = (WEB / "vendor" / name).resolve()
     if not str(p).startswith(str(WEB.resolve())) or not p.exists():
         return JSONResponse({"error": "not found"}, status_code=404)
-    return FileResponse(p)
+    return FileResponse(p, headers=NC)
 
 
 @app.get("/api/state")
