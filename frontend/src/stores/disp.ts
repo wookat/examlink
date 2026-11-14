@@ -21,6 +21,7 @@ export interface DispState {
   fsA: number | null;
   fsM: number | null;
   heroPos: "left" | "right";  // giant letter side
+  deckDir: "stack" | "top" | "left" | "right"; // where the hero sits vs the history rail
   compHide: boolean;          // composer collapsed to tab
   dotOpen: boolean;           // dot panel open (session-only)
 }
@@ -29,7 +30,7 @@ const DEFAULTS: DispState = {
   v: 2, align: "center", cw: 80, contrast: "std", latestOnly: false,
   gaze: "", dot: false, wake: true, fold: true, index: true,
   fsH: null, fsT: null, fsA: null, fsM: null,
-  heroPos: "right", compHide: false, dotOpen: false,
+  heroPos: "right", deckDir: "stack", compHide: false, dotOpen: false,
 };
 
 const GAZE_PRESETS: Record<string, { align: DispState["align"]; cw: number; latestOnly?: boolean; font?: number }> = {
@@ -54,6 +55,7 @@ export const useDispStore = defineStore("disp", {
       ...s,
       fontPx: Math.min(72, Math.max(14, parseInt(localStorage.getItem(FONT_KEY) || "20", 10) || 20)),
       compPeeked: false,
+      isNarrow: typeof window !== "undefined" && window.matchMedia("(max-width: 900px)").matches,
     };
   },
   getters: {
@@ -64,8 +66,7 @@ export const useDispStore = defineStore("disp", {
     fsAeff: (s) => s.fsA ?? s.fontPx,
     fsMeff: (s) => s.fsM ?? 12,
     liveVars(): Record<string, string> {
-      const narrow = typeof window !== "undefined" && window.matchMedia("(max-width: 640px)").matches;
-      const v: Record<string, string> = { "--cw": (narrow ? Math.max(this.cw, 86) : this.cw) + "%" };
+      const v: Record<string, string> = { "--cw": (this.isNarrow ? Math.max(this.cw, 92) : this.cw) + "%" };
       if (this.fsH) v["--fs-h"] = this.fsH + "px";
       if (this.fsT) v["--fs-t"] = this.fsT + "px";
       if (this.fsA) v["--fs-a"] = this.fsA + "px";
@@ -75,7 +76,7 @@ export const useDispStore = defineStore("disp", {
   },
   actions: {
     save() {
-      const { dotOpen, compPeeked, fontPx, ...persist } = this.$state as any;
+      const { dotOpen, compPeeked, fontPx, isNarrow, ...persist } = this.$state as any;
       localStorage.setItem(DISP_KEY, JSON.stringify(persist));
     },
     setFont(px: number) {
@@ -91,6 +92,11 @@ export const useDispStore = defineStore("disp", {
       this.save();
     },
     patch(p: Partial<DispState>) { Object.assign(this, p); this.save(); },
+    bindMedia() {
+      const mq = window.matchMedia("(max-width: 900px)");
+      const f = () => { this.isNarrow = mq.matches; };
+      mq.addEventListener ? mq.addEventListener("change", f) : mq.addListener(f);
+    },
     toggleDotOpen() { this.dotOpen = !this.dotOpen; },
     async keepAwake() {
       if (!this.wake) { try { await wakeLock?.release?.(); } catch {} wakeLock = null; return; }

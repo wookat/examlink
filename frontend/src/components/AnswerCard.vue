@@ -13,6 +13,7 @@ const props = defineProps<{
   groupFirst: boolean;  // first card of a contiguous qnum run → 第N题 chip
   indexMode: boolean;
   onDeck: boolean;
+  railItem?: boolean;   // compact row inside the history rail (rail layout)
 }>();
 
 const ui = useUiStore();
@@ -30,6 +31,7 @@ const cls = computed(() => ({
   "cur-q": props.indexMode && props.cur,
   "q-hero": props.indexMode && props.cur && props.rep,
   "deck-off": props.indexMode && !props.onDeck,
+  "rail-item": props.railItem,
   "err-card": props.card.error,
   "streaming": props.card.streaming,
   "has-hero": !!props.card.answer,

@@ -29,11 +29,12 @@ const overrides = {
 
 // display prefs → body classes/datasets (same hooks the CSS uses)
 watch(
-  () => [disp.align, disp.contrast, disp.heroPos, disp.compHide, disp.latestOnly, disp.index, disp.dot, disp.dotOpen],
+  () => [disp.align, disp.contrast, disp.heroPos, disp.deckDir, disp.isNarrow, disp.compHide, disp.latestOnly, disp.index, disp.dot, disp.dotOpen],
   () => {
     document.body.dataset.align = disp.align;
     document.body.dataset.contrast = disp.contrast;
     document.body.dataset.hero = disp.heroPos;
+    document.body.dataset.deck = disp.isNarrow ? "stack" : disp.deckDir; // narrow screens always stack
     document.body.classList.toggle("comp-hide", disp.compHide);
     document.body.classList.toggle("latest-only", disp.latestOnly);
     document.body.classList.toggle("idx-mode", disp.index);
@@ -47,6 +48,7 @@ watch(() => disp.wake, () => disp.keepAwake());
 const toastShow = computed(() => !!ui.toast);
 
 onMounted(() => {
+  disp.bindMedia();
   disp.setFont(disp.fontPx);
   disp.keepAwake();
   document.addEventListener("visibilitychange", () => disp.keepAwake());
