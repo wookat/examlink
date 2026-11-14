@@ -344,15 +344,16 @@ body.idx-mode:not(.dot-open) .ans:not(.cur-q) .qbig .ql {
   font-size: calc(var(--fs-h, var(--fs)) * .45); color: var(--text);
 }
 body.idx-mode:not(.dot-open) .ans:not(.cur-q) .qbig .qr { display: none; }
-/* newer-than-focus strips: mirror fan BELOW the hero — the focused card is
-   frontmost, history peeks above, upcoming questions peek below */
+/* newer-than-focus strips: fan attached right under the hero's real bottom
+   edge (--hb measured by AnswerDeck) — deeper strips step down and stack on
+   top of the previous one's tail so each shows its header sliver */
 body.idx-mode:not(.dot-open) .ans.below {
-  top: auto; bottom: calc(12px + (4 - var(--d, 1)) * 18px);
+  top: calc(var(--hb, 340px) + (var(--d, 1) - 1) * 18px);
   height: 46px; overflow: hidden; cursor: pointer;
-  z-index: calc(40 - var(--d, 0));
-  opacity: calc(1 - var(--d, 0) * .12);
+  z-index: calc(30 + var(--d, 0));
+  opacity: calc(1 - var(--d, 0) * .1);
   background: #0f0f12; border-color: var(--border);
-  border-bottom: 1px solid rgba(255,255,255,.1);
+  border-top: 1px solid rgba(255,255,255,.13);
   box-shadow: 0 10px 20px -8px rgba(0,0,0,.6);
   padding: 0 16px;
 }
@@ -535,24 +536,29 @@ body[data-align="right"][data-deck="left"].idx-mode:not(.dot-open) .feed.rail-mo
   border: 1px solid var(--border);
 }
 
-/* card-width grip pill — floats on the hero card's inner edge */
-.wdrag {
-  position: fixed; width: 16px; height: 52px; border-radius: 9px;
+/* card-width grip — pinned to the hero card's edge, scrolls with the card */
+.ans .hgrip {
+  position: absolute; top: 84px; right: -9px; z-index: 6;
+  width: 17px; height: 52px; border-radius: 9px;
   background: var(--card-solid); border: 1px solid var(--border-strong);
   display: grid; place-items: center;
-  z-index: 45; cursor: col-resize; opacity: .5;
-  transition: opacity .15s, border-color .15s, transform .15s;
-  box-shadow: 0 4px 14px rgba(0,0,0,.4);
+  cursor: col-resize; opacity: .45;
+  transition: opacity .15s, border-color .15s;
+  box-shadow: 0 4px 14px rgba(0,0,0,.4); touch-action: none;
 }
-.wdrag::after {
+.ans .hgrip::after {
   content: ""; width: 6px; height: 22px;
   border-left: 2px solid var(--faint); border-right: 2px solid var(--faint);
   border-radius: 1px;
 }
-.wdrag:hover, .wdrag:active { opacity: 1; border-color: var(--accent); }
-.wdrag:active { transform: scale(1.06); }
-@media (max-width: 700px) { .wdrag { display: none !important; } }
-body.dot-mode .wdrag { display: none; }
+.ans .hgrip:hover { opacity: 1; border-color: var(--accent); }
+body[data-deck="right"] .ans .hgrip { right: auto; left: -9px; }
+body[data-deck="top"] .ans .hgrip { top: auto; bottom: -9px; right: 46%; left: auto;
+  width: 52px; height: 17px; cursor: row-resize; }
+body[data-deck="top"] .ans .hgrip::after { width: 22px; height: 6px; border: none;
+  border-top: 2px solid var(--faint); border-bottom: 2px solid var(--faint); }
+@media (max-width: 700px) { .ans .hgrip { display: none !important; } }
+body.dot-mode .ans .hgrip { display: none; }
 
 /* ---------- composer: floating card, collapsible to a bottom tab ---------- */
 .composer {
@@ -702,10 +708,10 @@ body.dot-mode.dot-open .dot-actions { display: flex; }
 
 /* live preview PIP — floating window: drag anywhere, resize via corner, ⤢ maximises */
 .live-panel {
-  position: fixed; left: 14px; bottom: 14px; z-index: 56; width: 320px;
+  position: fixed; left: 14px; top: 200px; z-index: 56; width: 320px;
   border: 1px solid var(--border-strong); border-radius: 8px; overflow: hidden;
   background: #000; box-shadow: 0 14px 44px rgba(0,0,0,.6);
-  cursor: grab; touch-action: none;
+  cursor: grab; touch-action: none; user-select: none; -webkit-user-select: none;
 }
 .live-panel:active { cursor: grabbing; }
 .live-head {
@@ -1012,9 +1018,7 @@ body[data-contrast="high"] .field textarea { border-width: 1.5px; }
     top: calc((6 - var(--d, 0)) * 14px); height: 46px;
     width: calc(100% - 10px - var(--d, 0) * 16px);
   }
-  body.idx-mode:not(.dot-open) .ans.below {
-    top: auto; bottom: calc(10px + (4 - var(--d, 1)) * 14px); height: 44px;
-  }
+  body.idx-mode:not(.dot-open) .ans.below { top: calc(var(--hb, 300px) + (var(--d, 1) - 1) * 14px); height: 44px; }
   body.idx-mode.deck-below:not(.dot-open) .ans.q-hero { max-height: calc(100% - 84px - 72px); }
   body.idx-mode:not(.dot-open) .ans.q-hero {
     top: 72px; max-height: calc(100% - 84px);

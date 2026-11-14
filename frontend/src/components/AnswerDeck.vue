@@ -64,6 +64,22 @@ watch(placement, p => {
   document.body.classList.toggle("deck-below", below && disp.index);
 }, { immediate: true, deep: true });
 
+/* measure the hero card's real bottom edge → --hb on the feed anchors the
+   below-strips fan right under the hero, wherever its height ends */
+let measureIv = 0;
+function measureHero() {
+  const feed = feedEl.value;
+  const hero = feed?.querySelector<HTMLElement>(".ans.q-hero");
+  if (!feed) return;
+  if (hero) {
+    feed.style.setProperty("--hb", (hero.offsetTop + hero.offsetHeight) + "px");
+    const tab = document.querySelector<HTMLElement>(".comp-tab");
+    if (tab) { const r = hero.getBoundingClientRect(); tab.style.left = r.left + r.width / 2 + "px"; }
+  }
+}
+watch(placement, () => nextTick(measureHero), { deep: true, immediate: true });
+watch(() => cards.cards.map(c => c.text.length).join(","), () => nextTick(measureHero));
+
 watch(() => cards.cards.length, () => nextTick(scrollFeed));
 watch(() => cards.cards.map(c => c.text.length).join(","), () => {
   // streaming grows the last card → keep pinned (non-index only)
@@ -74,11 +90,13 @@ onMounted(() => {
   document.addEventListener("wheel", onWheel, { passive: false });
   document.addEventListener("touchstart", onTs, { passive: true });
   document.addEventListener("touchend", onTe, { passive: true });
+  measureIv = window.setInterval(measureHero, 600);   // hero height changes as content streams
 });
 onUnmounted(() => {
   document.removeEventListener("wheel", onWheel);
   document.removeEventListener("touchstart", onTs);
   document.removeEventListener("touchend", onTe);
+  clearInterval(measureIv);
 });
 
 defineExpose({ scrollFeed });

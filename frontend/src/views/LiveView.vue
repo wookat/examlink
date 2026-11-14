@@ -6,7 +6,6 @@ import ComposerBar from "../components/ComposerBar.vue";
 import NavCtl from "../components/NavCtl.vue";
 import DotFab from "../components/DotFab.vue";
 import LivePanel from "../components/LivePanel.vue";
-import WDrag from "../components/WDrag.vue";
 import { useSessionStore } from "../stores/session";
 import { useCardsStore } from "../stores/cards";
 import { useDispStore } from "../stores/disp";
@@ -110,7 +109,6 @@ onUnmounted(() => {
     <AnswerDeck />
 
     <ComposerBar />
-    <WDrag />
     <NavCtl />
     <DotFab />
     <LivePanel />

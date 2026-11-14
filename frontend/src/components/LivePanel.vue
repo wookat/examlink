@@ -27,13 +27,15 @@ function clamp() {
 
 function onDrag(e: PointerEvent) {
   if (maxed.value) return;
-  if ((e.target as HTMLElement).closest("button, .live-resize")) return;
+  if ((e.target as HTMLElement).closest?.("button, .live-resize")) return;
   e.preventDefault();
   const sx = e.clientX - pos.value.x, sy = e.clientY - pos.value.y;
   const move = (ev: PointerEvent) => { pos.value.x = ev.clientX - sx; pos.value.y = ev.clientY - sy; };
-  const up = () => { clamp(); save(); window.removeEventListener("pointermove", move); window.removeEventListener("pointerup", up); };
+  const up = () => { clamp(); save(); window.removeEventListener("pointermove", move); window.removeEventListener("pointerup", up); window.removeEventListener("pointercancel", up); };
   window.addEventListener("pointermove", move);
   window.addEventListener("pointerup", up);
+  window.addEventListener("pointercancel", up);
+  try { (e.currentTarget as HTMLElement).setPointerCapture?.(e.pointerId); } catch {}
 }
 function onResize(e: PointerEvent) {
   if (maxed.value) return;
@@ -42,9 +44,11 @@ function onResize(e: PointerEvent) {
   const move = (ev: PointerEvent) => {
     pos.value.w = Math.min(Math.max(sw + ev.clientX - sx, 180), window.innerWidth - pos.value.x - 10);
   };
-  const up = () => { save(); window.removeEventListener("pointermove", move); window.removeEventListener("pointerup", up); };
+  const up = () => { save(); window.removeEventListener("pointermove", move); window.removeEventListener("pointerup", up); window.removeEventListener("pointercancel", up); };
   window.addEventListener("pointermove", move);
   window.addEventListener("pointerup", up);
+  window.addEventListener("pointercancel", up);
+  try { (e.currentTarget as HTMLElement).setPointerCapture?.(e.pointerId); } catch {}
 }
 function onEsc(e: KeyboardEvent) { if (e.key === "Escape" && maxed.value) maxed.value = false; }
 
