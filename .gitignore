@@ -4,3 +4,6 @@ config.json
 knowledge.md
 history.json
 server.log
+build/
+dist/
+*.spec

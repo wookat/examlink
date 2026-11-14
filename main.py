@@ -29,10 +29,15 @@ import hotkeys as hkmod
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect, Request
 from fastapi.responses import FileResponse, JSONResponse, Response, StreamingResponse
 
-BASE = Path(__file__).resolve().parent
+if getattr(sys, "frozen", False):
+    # PyInstaller bundle: read-only assets in _MEIPASS, writable files next to the exe
+    BUNDLE = Path(getattr(sys, "_MEIPASS", Path(sys.executable).parent))
+    BASE = Path(sys.executable).resolve().parent
+else:
+    BUNDLE = BASE = Path(__file__).resolve().parent
 CONFIG_PATH = BASE / "config.json"
 KB_PATH = BASE / "knowledge.md"
-WEB = BASE / "web"
+WEB = BUNDLE / "web"
 
 app = FastAPI()
 
@@ -40,6 +45,8 @@ app = FastAPI()
 
 def load_config():
     example = BASE / "config.example.json"
+    if not example.exists():
+        example = BUNDLE / "config.example.json"
     if not CONFIG_PATH.exists() and example.exists():
         import shutil
         shutil.copy(example, CONFIG_PATH)

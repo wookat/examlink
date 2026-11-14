@@ -25,6 +25,16 @@ python main.py           # 或 pythonw main.py (Windows 无窗口)
 
 手机连同一 Wi-Fi，浏览器打开终端打印的 `http://<IP>:8791/?t=<token>` 链接（或 `/api/qr.png` 二维码）。
 
+## 打包分发（免 Python）
+
+```bat
+build.bat                :: 产出 dist\examlink.exe，单文件约 41MB
+```
+
+把 `dist\examlink.exe` 拷给任何 Windows 机器，双击即用，**无需安装 Python/依赖**。首次运行自动在 exe 旁生成 `config.json`（含随机 token），`knowledge.md`、`history.json` 同样写在 exe 旁边——**exe 必须放在可写目录**（不要放 Program Files）。web 资源和示例配置已打进包内。
+
+分发建议：只发 `examlink.exe` 一个文件即可；`config.example.json` 已在包内作为默认值模板，用户的一切配置都在网页设置页里改。
+
 ## 浏览器扩展（extension/）— 免 API Key 模式
 
 MV3 扩展，不调用任何 API：**直接把截图+提示词投送到你已登录的 AI 网页**（ChatGPT / 豆包 / Gemini / DeepSeek / Kimi），抓回的回答在侧边栏大屏显示。
