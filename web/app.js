@@ -89,6 +89,30 @@ function applyFont(px) {
 $("#fontMinus").onclick = () => applyFont(fontPx - 2);
 $("#fontPlus").onclick = () => applyFont(fontPx + 2);
 
+// ---------------- fullscreen ----------------
+const fsBtn = $("#btnFullscreen");
+function fsActive() {
+  return !!(document.fullscreenElement || document.webkitFullscreenElement);
+}
+function syncFsIcon() {
+  const on = fsActive();
+  fsBtn.querySelector(".ico-expand").classList.toggle("hidden", on);
+  fsBtn.querySelector(".ico-compress").classList.toggle("hidden", !on);
+  fsBtn.title = on ? "退出全屏" : "全屏";
+  fsBtn.setAttribute("aria-label", fsBtn.title);
+}
+fsBtn.onclick = () => {
+  const el = document.documentElement;
+  if (fsActive()) {
+    (document.exitFullscreen || document.webkitExitFullscreen).call(document);
+  } else {
+    (el.requestFullscreen || el.webkitRequestFullscreen).call(el);
+  }
+};
+["fullscreenchange", "webkitfullscreenchange"].forEach(ev =>
+  document.addEventListener(ev, syncFsIcon));
+syncFsIcon();
+
 // ---------------- display prefs (gaze / align / contrast / latest) ----------------
 const DISP_KEY = "examlink.disp";
 let DISP = { align: "center", cw: 80, contrast: "std", latestOnly: false, gaze: "" };
