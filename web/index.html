@@ -69,6 +69,8 @@
     </div>
   </footer>
 
+  <div id="wdrag" class="wdrag hidden" title="拖动调整内容宽度" aria-hidden="true"></div>
+
   <nav id="navCtl" class="nav-ctl hidden" aria-label="翻题">
     <button id="navPrev" title="上一题" aria-label="上一题"><svg class="ico" viewBox="0 0 24 24"><path d="m18 15-6-6-6 6"/></svg></button>
     <button id="navNext" title="下一题" aria-label="下一题"><svg class="ico" viewBox="0 0 24 24"><path d="m6 9 6 6 6-6"/></svg></button>
@@ -272,9 +274,23 @@
       <label class="field">内容宽度 <output id="vWidth"></output>
         <input type="range" id="widthRange" min="40" max="100" step="5">
       </label>
-      <label class="field">答题字号 <output id="vFontPx"></output>
+      <label class="field">答题字号（整体基准） <output id="vFontPx"></output>
         <input type="range" id="fontRange" min="14" max="72" step="1">
       </label>
+      <div class="font-grid">
+        <label class="field">答案字号 <output id="vFsH"></output>
+          <input type="range" id="fsHRange" min="20" max="96" step="1">
+        </label>
+        <label class="field">题名字号 <output id="vFsT"></output>
+          <input type="range" id="fsTRange" min="11" max="24" step="1">
+        </label>
+        <label class="field">解析字号 <output id="vFsA"></output>
+          <input type="range" id="fsARange" min="12" max="32" step="1">
+        </label>
+        <label class="field">信息字号 <output id="vFsM"></output>
+          <input type="range" id="fsMRange" min="10" max="18" step="1">
+        </label>
+      </div>
       <div class="btn-row">
         <button class="btn font-preset" data-px="18">紧凑</button>
         <button class="btn font-preset" data-px="22">标准</button>

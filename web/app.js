@@ -157,7 +157,7 @@ syncFsIcon();
 
 // ---------------- display prefs (gaze / align / contrast / latest) ----------------
 const DISP_KEY = "examlink.disp";
-let DISP = { align: "center", cw: 80, contrast: "std", latestOnly: false, gaze: "", dot: false, wake: true, fold: true, index: false };
+let DISP = { align: "center", cw: 80, contrast: "std", latestOnly: false, gaze: "", dot: false, wake: true, fold: true, index: false, fsH: null, fsT: null, fsA: null, fsM: null };
 try { Object.assign(DISP, JSON.parse(localStorage.getItem(DISP_KEY) || "{}")); } catch {}
 
 const GAZE_PRESETS = {
@@ -190,8 +190,18 @@ function applyDisp() {
   if ($("#wakeSw")) $("#wakeSw").checked = !!DISP.wake;
   if ($("#foldSw")) $("#foldSw").checked = !!DISP.fold;
   if ($("#indexSw")) $("#indexSw").checked = !!DISP.index;
+  // per-section font sizes; null = derived from the master --fs slider
+  const vl = $("#view-live").style;
+  const autoFs = { fsH: Math.round(fontPx * 1.45), fsT: 14, fsA: fontPx, fsM: 12 };
+  [["fsH", "--fs-h", "fsHRange", "vFsH"], ["fsT", "--fs-t", "fsTRange", "vFsT"],
+   ["fsA", "--fs-a", "fsARange", "vFsA"], ["fsM", "--fs-m", "fsMRange", "vFsM"]].forEach(([k, v, rid, oid]) => {
+    const eff = DISP[k] || autoFs[k];
+    if (DISP[k]) vl.setProperty(v, eff + "px"); else vl.removeProperty(v);
+    if ($("#" + rid)) { $("#" + rid).value = eff; $("#" + oid).textContent = eff + "px"; }
+  });
   syncDotFab();
   keepAwake();
+  placeWdrag();
 }
 function setGaze(g) {
   const p = GAZE_PRESETS[g]; if (!p) return;
@@ -226,6 +236,45 @@ $("#foldSw")?.addEventListener("change", e => {
 });
 $("#indexSw")?.addEventListener("change", e => {
   DISP.index = e.target.checked; applyDisp(); saveDisp();
+});
+// independent font-size sliders for title / answer / analysis / meta rows
+[["fsHRange", "fsH"], ["fsTRange", "fsT"], ["fsARange", "fsA"], ["fsMRange", "fsM"]].forEach(([rid, k]) => {
+  $("#" + rid)?.addEventListener("input", e => {
+    DISP[k] = parseInt(e.target.value, 10); DISP.gaze = ""; applyDisp(); saveDisp();
+  });
+});
+
+/* column width drag handle on the inner edge of the content column */
+const wdrag = $("#wdrag");
+function placeWdrag() {
+  if (!wdrag) return;
+  const col = document.querySelector("#answers .ans") || document.querySelector(".composer .quick-row");
+  const hide = view !== "live" || DISP.dot || !col || window.innerWidth < 700;
+  wdrag.classList.toggle("hidden", hide);
+  if (hide) return;
+  const r = col.getBoundingClientRect();
+  wdrag.style.left = ((DISP.align === "left" ? r.right : r.left) - 7) + "px";
+}
+wdrag?.addEventListener("pointerdown", e => {
+  e.preventDefault();
+  const vw = window.innerWidth;
+  const move = ev => {
+    const x = ev.clientX;
+    let pct;
+    if (DISP.align === "left") pct = x / vw * 100;
+    else if (DISP.align === "center") pct = Math.abs(vw / 2 - x) * 2 / vw * 100;
+    else pct = (vw - x) / vw * 100;
+    DISP.cw = Math.min(100, Math.max(30, Math.round(pct)));
+    DISP.gaze = "";
+    applyDisp();
+  };
+  const up = () => {
+    saveDisp();
+    window.removeEventListener("pointermove", move);
+    window.removeEventListener("pointerup", up);
+  };
+  window.addEventListener("pointermove", move);
+  window.addEventListener("pointerup", up);
 });
 
 /* index mode: only the current (latest) question group shows full cards;
@@ -415,6 +464,7 @@ function route() {
   $("#view-live").classList.toggle("hidden", view !== "live");
   $("#view-settings").classList.toggle("hidden", view !== "settings");
   if (view === "settings" && !previewLoaded) loadPreview();
+  requestAnimationFrame(placeWdrag);
 }
 window.addEventListener("hashchange", route);
 window.addEventListener("resize", applyDisp);
@@ -454,6 +504,7 @@ function addCard({ id, image, trigger, tag, qnum }) {
   updateQChips();
   updateNavCtl();
   scrollFeed();
+  requestAnimationFrame(placeWdrag);
   return { el: div, md: div.querySelector(".md") };
 }
 function copyText(t) {
@@ -495,6 +546,14 @@ function setAnsChipFromText(el, text) {
     el.querySelector(".ans-head").insertBefore(chip, el.querySelector(".ans-time"));
   }
   chip.textContent = "答案 " + ans;
+  // hero already shows it — drop the duplicated "答案：X" lines from the body
+  const bodyMd = el.querySelector(".md");
+  if (bodyMd) {
+    const stripped = (el._text || text).split("\n")
+      .filter(l => !/^\s*[*_#>\-\s]*\*{0,2}(?:最终|最后|正确|参考)?答案(?:为|是)?\s*[:：]/.test(l))
+      .join("\n");
+    bodyMd.innerHTML = md(stripped);
+  }
   // Cluely-style layering: big answer first, reasoning folded behind a toggle
   let hero = el.querySelector(".ans-hero");
   if (!hero) {
