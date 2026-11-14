@@ -27,10 +27,10 @@ export interface DispState {
 }
 
 const DEFAULTS: DispState = {
-  v: 2, align: "center", cw: 80, contrast: "std", latestOnly: false,
+  v: 3, align: "center", cw: 80, contrast: "std", latestOnly: false,
   gaze: "", dot: false, wake: true, fold: true, index: true,
   fsH: null, fsT: null, fsA: null, fsM: null,
-  heroPos: "right", deckDir: "stack", compHide: false, dotOpen: false,
+  heroPos: "right", deckDir: "stack", compHide: true, dotOpen: false,
 };
 
 const GAZE_PRESETS: Record<string, { align: DispState["align"]; cw: number; latestOnly?: boolean; font?: number }> = {
@@ -49,6 +49,7 @@ export const useDispStore = defineStore("disp", {
       const saved = JSON.parse(localStorage.getItem(DISP_KEY) || "{}");
       Object.assign(s, saved);
       if ((saved.v || 0) < 2) { s.index = true; s.v = 2; }   // deck layout is the default
+      if ((saved.v || 0) < 3) { s.compHide = true; s.v = 3; } // composer starts folded
     } catch {}
     s.dotOpen = false;
     return {

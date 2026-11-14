@@ -30,6 +30,7 @@ const cls = computed(() => ({
   "ans": true,
   "cur-q": props.indexMode && props.cur,
   "q-hero": props.indexMode && props.cur && props.rep,
+  "below": props.indexMode && props.depth < 0,   // newer than focus → peeks below hero
   "deck-off": props.indexMode && !props.onDeck,
   "rail-item": props.railItem,
   "err-card": props.card.error,
@@ -54,7 +55,7 @@ function onPeekClick(e: MouseEvent) {
 </script>
 
 <template>
-  <article :class="cls" :style="{ '--d': depth }" @click="onPeekClick">
+  <article :class="cls" :style="{ '--d': Math.abs(depth) }" @click="onPeekClick">
     <div class="ans-head">
       <span v-if="groupFirst && card.qnum" class="qchip">第 {{ card.qno || card.qnum }} 题</span>
       <span class="tag" :class="tagCls">{{ card.tag }}</span>

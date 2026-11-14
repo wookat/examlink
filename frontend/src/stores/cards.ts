@@ -64,7 +64,7 @@ export const useCardsStore = defineStore("cards", {
       const p = this.placement;
       for (const c of this.cards) {
         const pl = p[c.id];
-        out[c.id] = pl.rep && pl.depth >= 0 && pl.depth <= DECK_LAYERS;
+        out[c.id] = pl.rep && pl.depth >= -DECK_LAYERS && pl.depth <= DECK_LAYERS;
       }
       return out;
     },

@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { onMounted, onUnmounted, ref } from "vue";
-import { Camera, Image, Square, SendHorizontal, ChevronDown } from "@lucide/vue";
+import { Camera, Image, Square, SendHorizontal, ChevronDown, ChevronUp } from "@lucide/vue";
 import { useSessionStore } from "../stores/session";
 import { useDispStore } from "../stores/disp";
 import { useUiStore } from "../stores/ui";
@@ -60,7 +60,7 @@ onUnmounted(() => {
   <footer class="composer">
     <div class="composer-box">
       <button class="comp-fold" title="收起操作栏" aria-label="收起操作栏" @click="fold">
-        <ChevronDown :size="14" />
+        <ChevronDown :size="15" />
       </button>
       <div class="quick-row">
         <button class="qbtn primary" @click="capture">
@@ -81,5 +81,7 @@ onUnmounted(() => {
       </div>
     </div>
   </footer>
-  <button v-if="disp.compHide" class="comp-tab" aria-label="展开操作栏" title="展开操作栏" @click="unfold">▲ 操作</button>
+  <button v-if="disp.compHide" class="comp-tab" aria-label="展开操作栏" title="展开操作栏" @click="unfold">
+    <ChevronUp :size="18" />
+  </button>
 </template>

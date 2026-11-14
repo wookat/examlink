@@ -24,7 +24,7 @@ let deckWheelT = 0;
 function onWheel(e: WheelEvent) {
   if (!disp.index) return;
   if (disp.dotOpen) return;                      // panel = normal list scroll
-  if ((e.target as HTMLElement).closest(".composer, .lightbox, .n-modal, .rail")) return;
+  if ((e.target as HTMLElement).closest?.(".composer, .lightbox, .n-modal, .rail")) return;
   const hero = feedEl.value?.querySelector<HTMLElement>(".ans.q-hero");
   if (hero && hero.scrollHeight > hero.clientHeight + 4) {
     const dir = e.deltaY > 0 ? 1 : -1;
@@ -45,7 +45,7 @@ let tsx = 0, tsy = 0;
 function onTs(e: TouchEvent) { const t = e.touches[0]; tsx = t.clientX; tsy = t.clientY; }
 function onTe(e: TouchEvent) {
   if (!disp.index || disp.dotOpen) return;
-  if ((e.target as HTMLElement).closest(".composer, .lightbox, .n-modal, .rail")) return;
+  if ((e.target as HTMLElement).closest?.(".composer, .lightbox, .n-modal, .rail")) return;
   const t = e.changedTouches[0];
   const dx = t.clientX - tsx, dy = t.clientY - tsy;
   if (Math.abs(dx) > 64 && Math.abs(dx) > Math.abs(dy) * 1.4) cards.deckStep(dx < 0 ? 1 : -1);
@@ -57,6 +57,13 @@ function scrollFeed() {
   const f = feedEl.value;
   if (f) f.scrollTop = f.scrollHeight;
 }
+/* bidirectional deck: when cards newer than focus exist they peek below the
+   hero — reserve a bottom zone so the hero never covers them */
+watch(placement, p => {
+  const below = Object.values(p).some(x => x.rep && x.depth < 0 && x.depth >= -4);
+  document.body.classList.toggle("deck-below", below && disp.index);
+}, { immediate: true, deep: true });
+
 watch(() => cards.cards.length, () => nextTick(scrollFeed));
 watch(() => cards.cards.map(c => c.text.length).join(","), () => {
   // streaming grows the last card → keep pinned (non-index only)

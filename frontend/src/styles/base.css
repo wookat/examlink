@@ -92,13 +92,13 @@ img { max-width: 100%; }
   background: var(--bg);
   border-bottom: 1px solid var(--border);
 }
-.brand { display: flex; align-items: center; gap: 9px; font-weight: 700; font-size: 16px; letter-spacing: .3px; }
+.brand { display: flex; align-items: center; gap: 9px; font-weight: 700; font-size: 16.5px; letter-spacing: -.02em; }
 .logo-mark {
-  display: grid; place-items: center; width: 23px; height: 23px;
-  border-radius: 3px; font-size: 13px; line-height: 1; color: #fff;
-  background: var(--accent);
+  display: grid; place-items: center; width: 24px; height: 24px; line-height: 0;
+  filter: drop-shadow(0 2px 8px rgba(129,140,248,.35));
 }
-.brand-text { padding-top: 1px; }
+.brand-text { padding-top: 1px; color: var(--text); }
+.brand-text em { font-style: normal; color: var(--accent); }
 .topbar-right { display: flex; align-items: center; gap: 8px; }
 
 .conn-dot { width: 9px; height: 9px; border-radius: 50%; background: var(--faint); display: inline-block; }
@@ -344,7 +344,24 @@ body.idx-mode:not(.dot-open) .ans:not(.cur-q) .qbig .ql {
   font-size: calc(var(--fs-h, var(--fs)) * .45); color: var(--text);
 }
 body.idx-mode:not(.dot-open) .ans:not(.cur-q) .qbig .qr { display: none; }
-/* parked cards: older than the visible layers, newer than focus, or
+/* newer-than-focus strips: mirror fan BELOW the hero — the focused card is
+   frontmost, history peeks above, upcoming questions peek below */
+body.idx-mode:not(.dot-open) .ans.below {
+  top: auto; bottom: calc(12px + (4 - var(--d, 1)) * 18px);
+  height: 46px; overflow: hidden; cursor: pointer;
+  z-index: calc(40 - var(--d, 0));
+  opacity: calc(1 - var(--d, 0) * .12);
+  background: #0f0f12; border-color: var(--border);
+  border-bottom: 1px solid rgba(255,255,255,.1);
+  box-shadow: 0 10px 20px -8px rgba(0,0,0,.6);
+  padding: 0 16px;
+}
+body.idx-mode:not(.dot-open) .ans.below:hover { opacity: 1; }
+/* hero leaves a bottom zone when below-strips exist so they stay visible */
+body.idx-mode.deck-below:not(.dot-open) .ans.q-hero {
+  max-height: calc(100% - 120px - 104px);
+}
+/* parked cards: outside the visible layers on either side, or
    superseded answers inside the focus group — all leave the deck */
 body.idx-mode:not(.dot-open) .ans.deck-off {
   top: 100%; opacity: 0; pointer-events: none;
@@ -363,6 +380,22 @@ body.idx-mode:not(.dot-open) .ans.q-hero {
               inset 0 1px 0 rgba(255,255,255,.05);
 }
 body.idx-mode:not(.dot-open) .ans.cur-q { border-color: var(--accent); }
+
+/* hero internals emphasised — the current question + answer are the focus */
+body.idx-mode:not(.dot-open) .ans.q-hero { padding: 20px 24px; }
+body.idx-mode:not(.dot-open) .ans.q-hero .ans-head { font-size: calc(var(--fs-m, 12px) * 1.06); }
+body.idx-mode:not(.dot-open) .ans.q-hero .ans-sub {
+  font-size: calc(var(--fs-t, 14px) * 1.22); -webkit-line-clamp: 3;
+}
+body.idx-mode:not(.dot-open) .ans.q-hero .qrow { gap: 22px; padding: 8px 0 6px; }
+body.idx-mode:not(.dot-open) .ans.q-hero .qbig .ql {
+  font-size: min(calc(var(--fs-h, var(--fs)) * 1.3), 16vw);
+}
+body.idx-mode:not(.dot-open) .ans.q-hero.detail-open .qbig .ql {
+  font-size: min(calc(var(--fs-h, var(--fs)) * .7), 12vw);
+}
+body.idx-mode:not(.dot-open) .ans.q-hero .md { font-size: calc(var(--fs-a, var(--fs)) * 1.05); }
+body.idx-mode:not(.dot-open) .ans.q-hero .shot-thumb { width: 88px; max-height: 60px; }
 
 /* ---------- rail layout (desktop, body[data-deck]=left|right|top):
    hero takes the main zone, scrollable history rail sits on the other side.
@@ -512,28 +545,37 @@ body.dot-mode .wdrag { display: none; }
   background: var(--card-solid); border: 1px solid var(--border-strong);
   border-radius: var(--radius); padding: 10px 12px;
   box-shadow: 0 -4px 22px rgba(0,0,0,.4);
-  transition: transform .25s ease, opacity .25s ease;
+  transition: transform .34s cubic-bezier(.32,.9,.28,1), opacity .22s ease;
 }
 body.comp-hide .composer { height: 0; padding: 0; overflow: visible; }
-body.comp-hide .composer-box { transform: translateY(130%); opacity: 0; pointer-events: none; }
+body.comp-hide .composer-box {
+  transform: translateY(70%) scale(.96); opacity: 0; pointer-events: none;
+}
+/* circular fold handle pinned to the top edge centre of the composer card */
 .comp-fold {
-  position: absolute; top: -11px; right: 14px; z-index: 1;
-  width: 34px; height: 22px; padding: 0;
-  border: 1px solid var(--border-strong); border-radius: var(--radius-s);
-  background: var(--card-solid); color: var(--faint); font-size: 13px; line-height: 1;
-  cursor: pointer;
+  position: absolute; top: 0; left: 50%; transform: translate(-50%, -50%); z-index: 1;
+  width: 28px; height: 28px; padding: 0;
+  display: grid; place-items: center;
+  border: 1px solid var(--border-strong); border-radius: 50%;
+  background: var(--card-solid); color: var(--faint);
+  cursor: pointer; transition: color .15s, border-color .15s, transform .15s, box-shadow .15s;
+  box-shadow: 0 4px 12px rgba(0,0,0,.4);
 }
-.comp-fold:hover { color: var(--text); }
+.comp-fold:hover { color: var(--text); border-color: var(--accent); transform: translate(-50%,-50%) scale(1.08); }
+/* collapsed state: circular floating re-open button */
 .comp-tab {
-  display: none;
-  position: fixed; bottom: 0; left: 50%; transform: translateX(-50%); z-index: 41;
-  padding: 5px 22px calc(5px + env(safe-area-inset-bottom, 0px));
-  border: 1px solid var(--border-strong); border-bottom: 0;
-  border-radius: 8px 8px 0 0; background: var(--card-solid);
-  color: var(--faint); font-size: 12px; font-family: inherit; cursor: pointer;
+  position: fixed; bottom: calc(14px + env(safe-area-inset-bottom, 0px)); left: 50%;
+  z-index: 41; width: 46px; height: 46px; padding: 0;
+  display: grid; place-items: center;
+  border: 1px solid var(--border-strong); border-radius: 50%;
+  background: var(--card-solid); color: var(--muted); cursor: pointer;
+  box-shadow: 0 8px 24px rgba(0,0,0,.5), inset 0 1px 0 rgba(255,255,255,.06);
+  transform: translateX(-50%);
+  transition: color .15s, border-color .15s, transform .18s;
+  animation: tabIn .3s cubic-bezier(.3,.9,.3,1.15) .12s backwards;
 }
-.comp-tab:hover { color: var(--text); }
-body.comp-hide .comp-tab { display: block; }
+@keyframes tabIn { from { opacity: 0; transform: translateX(-50%) translateY(14px); } }
+.comp-tab:hover { color: var(--text); border-color: var(--accent); transform: translateX(-50%) scale(1.07); }
 body.dot-mode .comp-tab { display: none !important; }
 .quick-row { display: flex; gap: 10px; margin-bottom: 10px; }
 .qbtn {
@@ -562,22 +604,23 @@ body.dot-mode .comp-tab { display: none !important; }
 .ask-row input:focus { border-color: var(--accent); }
 .ask-row .qbtn { flex: 0 0 auto; padding: 11px 18px; }
 
-/* floating prev/next */
+/* floating prev/next — single pill docked at the right edge, vertically centred */
 .nav-ctl {
-  position: fixed; right: 14px; bottom: 158px; z-index: 45;
-  display: flex; flex-direction: column; gap: 9px;
+  position: fixed; right: 12px; top: 50%; transform: translateY(-50%); z-index: 45;
+  display: flex; flex-direction: column; gap: 2px; padding: 5px;
+  background: var(--card-solid); border: 1px solid var(--border-strong);
+  border-radius: 24px; box-shadow: 0 8px 26px rgba(0,0,0,.45);
 }
 /* park nav controls in the empty column when content is edge-aligned */
-body[data-align="right"] .nav-ctl { right: auto; left: 14px; }
+body[data-align="right"] .nav-ctl { right: auto; left: 12px; }
 .nav-ctl button {
-  width: 44px; height: 44px; border-radius: 50%;
-  background: var(--card-solid); border: 1px solid var(--border-strong);
-  color: var(--text); cursor: pointer; opacity: .85;
-  display: grid; place-items: center; transition: transform .1s, opacity .15s;
+  width: 38px; height: 38px; border-radius: 50%; border: none;
+  background: transparent; color: var(--muted); cursor: pointer;
+  display: grid; place-items: center; transition: transform .1s, color .15s, background .15s;
 }
-.nav-ctl button .ico { width: 22px; height: 22px; vertical-align: middle; }
-.nav-ctl button:hover { opacity: 1; border-color: var(--accent); }
-.nav-ctl button:active { transform: scale(.9); background: var(--accent-soft); }
+.nav-ctl button .ico { width: 20px; height: 20px; vertical-align: middle; }
+.nav-ctl button:hover { color: var(--text); background: var(--accent-soft); }
+.nav-ctl button:active { transform: scale(.88); }
 
 /* ============================================================
    MINIMAL DOT MODE (QuiteWin-style: collapse to a floating dot)
@@ -920,6 +963,10 @@ body[data-contrast="high"] .field textarea { border-width: 1.5px; }
     top: calc((6 - var(--d, 0)) * 14px); height: 46px;
     width: calc(100% - 10px - var(--d, 0) * 16px);
   }
+  body.idx-mode:not(.dot-open) .ans.below {
+    top: auto; bottom: calc(10px + (4 - var(--d, 1)) * 14px); height: 44px;
+  }
+  body.idx-mode.deck-below:not(.dot-open) .ans.q-hero { max-height: calc(100% - 84px - 72px); }
   body.idx-mode:not(.dot-open) .ans.q-hero {
     top: 72px; max-height: calc(100% - 84px);
     width: calc(100% - 10px); padding: 13px 14px;
@@ -940,9 +987,9 @@ body[data-contrast="high"] .field textarea { border-width: 1.5px; }
   .qbtn span { font-size: 14px; }
   .ask-btn-text { display: none; }
   .ask-row .qbtn { padding: 12px 16px; }
-  .nav-ctl { bottom: 148px; right: 10px; }
-  body[data-align="right"] .nav-ctl { right: auto; left: 10px; }
-  .nav-ctl button { width: 44px; height: 44px; }
+  .nav-ctl { right: 8px; padding: 4px; }
+  body[data-align="right"] .nav-ctl { right: auto; left: 8px; }
+  .nav-ctl button { width: 36px; height: 36px; }
   .seg-btn { font-size: 12.5px; padding: 8px 4px; }
   .shot-thumb { width: 76px; max-height: 54px; }
   .ans { padding: 14px 15px; }
