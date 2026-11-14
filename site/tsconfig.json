@@ -1,0 +1,10 @@
+{
+  "extends": "astro/tsconfigs/strict",
+  "include": ["src/**/*", "../frontend/src/**/*"],
+  "compilerOptions": {
+    "jsx": "preserve",
+    "moduleResolution": "bundler",
+    "allowJs": true,
+    "verbatimModuleSyntax": false
+  }
+}

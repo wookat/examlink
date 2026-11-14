@@ -1,0 +1,20 @@
+{
+  "name": "examlink-site",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "scripts": {
+    "dev": "astro dev",
+    "build": "astro build",
+    "preview": "astro preview"
+  },
+  "dependencies": {
+    "@astrojs/vue": "^5.1.0",
+    "@fontsource/inter": "^5.2.5",
+    "@lucide/vue": "^1.73.0",
+    "astro": "^5.15.0",
+    "pinia": "^3.0.3",
+    "vue": "^3.5.22",
+    "vue-router": "^4.5.1"
+  }
+}
