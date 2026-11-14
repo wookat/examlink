@@ -179,7 +179,7 @@ body.latest-only .feed > .ans:not(:last-child) { display: none; }
   padding: 14px 16px;
   animation: cardIn .25s ease;
   scroll-snap-align: start; scroll-margin-top: 12px;
-  transition: border-color .2s;
+  transition: border-color .2s, transform .25s ease, opacity .25s ease, margin .25s ease;
 }
 .ans:hover { border-color: var(--border-strong); }
 @keyframes cardIn { from { opacity: 0; transform: translateY(10px) scale(.98); } }
@@ -271,33 +271,43 @@ body[data-hero="left"] .qrow { flex-direction: row-reverse; }
 .ans.has-hero:not(.detail-open) .md { display: none; }
 .ans.has-hero.detail-open .qbig .ql { font-size: calc(var(--fs-h, var(--fs)) * .6); }
 
-/* deck layout (the sketch): past questions flatten into thin strips —
-   keywords squiggle left + letter right, dimmed. The current question's
-   card is raised, wider, and overlaps the strips above and below it. */
+/* card-stack layout (iOS-notification / Apple Wallet deck):
+   past questions tuck under each other — each strip overlaps the one
+   above it by ~10px, scaled .96, faded .66, casting shadow upward.
+   The current question's card rises over the pile. */
 body.idx-mode .ans:not(.cur-q):not(.force-open) {
-  padding: 7px 14px; cursor: pointer; opacity: .72;
+  margin-top: -24px;             /* 14px flex gap + ~10px real overlap */
+  padding: 6px 16px; cursor: pointer;
+  transform: scale(.96); transform-origin: top center;
+  opacity: .66;
+  border-color: rgba(255,255,255,.06);
+  box-shadow: 0 -8px 18px -6px rgba(0,0,0,.55);
 }
+body.idx-mode .ans:not(.cur-q):not(.force-open):hover { opacity: .95; }
 body.idx-mode .ans:not(.cur-q):not(.force-open) .ans-head,
 body.idx-mode .ans:not(.cur-q):not(.force-open) .detail-toggle,
 body.idx-mode .ans:not(.cur-q):not(.force-open) .md,
 body.idx-mode .ans:not(.cur-q):not(.force-open) .shot-thumb { display: none; }
-body.idx-mode .ans:not(.cur-q):not(.force-open) .qrow { padding: 0; }
+body.idx-mode .ans:not(.cur-q):not(.force-open) .qrow { padding: 0; align-items: flex-start; }
 body.idx-mode .ans:not(.cur-q):not(.force-open) .qinfo .ans-sub {
   font-size: 12px; font-weight: 500; color: var(--faint);
   -webkit-line-clamp: 1; margin: 0;
 }
-body.idx-mode .ans:not(.cur-q):not(.force-open) .qbig .ql { font-size: calc(var(--fs-h, var(--fs)) * .5); }
+body.idx-mode .ans:not(.cur-q):not(.force-open) .qbig .ql {
+  font-size: calc(var(--fs-h, var(--fs)) * .45); color: var(--text);
+}
 body.idx-mode .ans:not(.cur-q):not(.force-open) .qbig .qr { display: none; }
 body.idx-mode .ans.cur-q { border-color: var(--accent); }
-/* raised current card: pokes out 8px on both sides and covers the
-   neighbouring strips — the "product card in a deck" from the sketch */
+/* the raised current card pokes 8px out on both sides and covers
+   ~22px of the strips above and below it — the top of the deck */
 body.idx-mode .ans.q-hero {
   position: relative; z-index: 2;
   max-width: calc(min(var(--cw), 1100px) + 16px);
-  margin: -22px -8px; padding: 18px 20px;
-  background: #141822;
+  margin: -36px -8px 0;           /* 14px gap + ~22px real overlap on top */
+  padding: 18px 20px;
+  background: #141a26;
   border-color: var(--accent);
-  box-shadow: 0 14px 36px rgba(0,0,0,.55);
+  box-shadow: 0 18px 44px rgba(0,0,0,.6), 0 -10px 30px rgba(0,0,0,.35);
 }
 .copy-btn {
   flex: 0 0 auto; width: 26px; height: 26px; border-radius: 3px;
