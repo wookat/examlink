@@ -157,8 +157,12 @@ syncFsIcon();
 
 // ---------------- display prefs (gaze / align / contrast / latest) ----------------
 const DISP_KEY = "examlink.disp";
-let DISP = { align: "center", cw: 80, contrast: "std", latestOnly: false, gaze: "", dot: false, wake: true, fold: true, index: false, fsH: null, fsT: null, fsA: null, fsM: null, heroPos: "right", compHide: false };
-try { Object.assign(DISP, JSON.parse(localStorage.getItem(DISP_KEY) || "{}")); } catch {}
+let DISP = { v: 2, align: "center", cw: 80, contrast: "std", latestOnly: false, gaze: "", dot: false, wake: true, fold: true, index: true, fsH: null, fsT: null, fsA: null, fsM: null, heroPos: "right", compHide: false };
+try {
+  const saved = JSON.parse(localStorage.getItem(DISP_KEY) || "{}");
+  Object.assign(DISP, saved);
+  if ((saved.v || 0) < 2) { DISP.index = true; DISP.v = 2; saveDisp(); }  // deck layout is the new default
+} catch {}
 
 const GAZE_PRESETS = {
   left:  { align: "right",  cw: 58 },
@@ -320,6 +324,11 @@ function markCurGroup() {
   const cards = [...document.querySelectorAll("#answers .ans")];
   const cur = cards.length ? cards[cards.length - 1].dataset.qnum : null;
   cards.forEach(c => c.classList.toggle("cur-q", !!cur && c.dataset.qnum === cur));
+  /* the anchor card of the current group becomes the raised hero card
+     that overlaps its collapsed neighbours (deck look) */
+  const anchors = groupAnchors();
+  const heroAnchor = anchors[anchors.length - 1];
+  cards.forEach(c => c.classList.toggle("q-hero", c === heroAnchor));
 }
 document.addEventListener("click", e => {
   if (!DISP.index) return;
