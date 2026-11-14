@@ -17,6 +17,7 @@ import base64
 import collections
 import json
 import os
+import re
 import socket
 import sys
 import time
@@ -166,6 +167,72 @@ def resolve_system():
     return aimod.with_kb(resolve_prompt(), load_kb())
 
 
+def kb_append(answer):
+    """Auto-grow knowledge.md with answered Q&A (dedup, size-capped, toggleable)."""
+    if not CFG.get("kb_auto_append"):
+        return
+    a = (answer or "").strip()
+    if len(a) < 20 or "无法确定" in a[:60]:
+        return
+    try:
+        existing = KB_PATH.read_text(encoding="utf-8") if KB_PATH.exists() else ""
+        head = a.splitlines()[0].strip()
+        if (head and head in existing) or len(existing) > 80000:
+            return
+        with KB_PATH.open("a", encoding="utf-8") as f:
+            f.write(f"\n\n## 答过 {time.strftime('%m-%d %H:%M')}\n{a[:600]}\n")
+    except Exception:
+        pass
+
+
+def profile_prov(name):
+    """Resolve a named profile into a provider cfg dict for verify calls."""
+    p = (CFG.get("profiles") or {}).get(name) or {}
+    return {"name": p.get("label", name), "base_url": (p.get("base_url") or "").rstrip("/"),
+            "api_key": p.get("api_key", ""), "model": p.get("model", ""), "vision": True}
+
+
+def extract_answer(text):
+    m = re.search(r"答案[:：]\s*\**\s*([^\n*]{1,24})", text or "")
+    return m.group(1).strip().rstrip("*") if m else ""
+
+
+async def run_verify(cid, image_b64s, question):
+    """Second-model cross-check: re-ask the same image with verify_profile,
+    compare extracted answers, broadcast agree/disagree."""
+    try:
+        prov = profile_prov(CFG.get("verify_profile"))
+        if not (prov["api_key"] and prov["base_url"] and prov["model"]):
+            return
+        msgs = [{"role": "system", "content": resolve_system()},
+                {"role": "user", "content": aimod.build_user_content(question, image_b64s)}]
+        text = ""
+        async for piece in aimod.stream_chat(msgs, prov):
+            text += piece
+        a2 = extract_answer(text)
+        # wait for the primary card to finish (verify may return first)
+        a1 = ""
+        for _ in range(240):
+            done = False
+            for c in reversed(CARD_LOG):
+                if c.get("id") == cid:
+                    done = c.get("done") or c.get("stopped") or c.get("error")
+                    a1 = extract_answer(c.get("answer", ""))
+                    break
+            if done or a1:
+                break
+            await asyncio.sleep(0.5)
+        if not (a1 and a2):
+            return
+        norm = lambda s: re.sub(r"[^0-9A-Za-z一-鿿]", "", s).upper()
+        agree = norm(a1) == norm(a2)
+        await broadcast({"t": "verify", "id": cid, "agree": agree,
+                         "alt": "" if agree else a2,
+                         "model": prov["name"] + "/" + prov["model"]})
+    except Exception:
+        pass
+
+
 def public_state():
     pc = aimod.provider_cfg(CFG)
     mon = cap.monitors()[cap.effective_index(CFG.get("monitor"))]
@@ -198,6 +265,8 @@ def public_state():
         "hotkey_actions": hkmod.ACTIONS,
         "jpeg_quality": CFG.get("jpeg_quality", 92),
         "max_image_dim": CFG.get("max_image_dim", 3000),
+        "kb_auto_append": bool(CFG.get("kb_auto_append")),
+        "verify_profile": CFG.get("verify_profile", ""),
     }
 
 
@@ -267,6 +336,8 @@ async def do_capture(trigger="manual", ask=True, question=""):
                 await broadcast({"t": "error", "msg": "AI 正在生成中，本次截图未送答", "id": cid})
             else:
                 CURRENT_TASK = asyncio.create_task(run_ai(cid, [b64], question, new_conv=True))
+                if CFG.get("verify_profile"):
+                    asyncio.create_task(run_verify(cid, [b64], question))
     except Exception as e:
         STATE["last_error"] = str(e)
         await broadcast({"t": "error", "msg": f"截图失败: {e}"})
@@ -319,7 +390,9 @@ async def run_ai(cid, image_b64s, question, new_conv=False):
             HISTORY.pop()
     finally:
         if sent_done:
-            log_card_update(cid, answer="".join(full), done=True)
+            text_done = "".join(full)
+            log_card_update(cid, answer=text_done, done=True)
+            kb_append(text_done)
         STATE["busy"] = False
         if CURRENT_TASK is asyncio.current_task():
             CURRENT_TASK = None
@@ -418,6 +491,24 @@ async def app_js():
 @app.get("/style.css")
 async def style_css():
     return FileResponse(WEB / "style.css", media_type="text/css")
+
+
+@app.get("/manifest.webmanifest")
+async def manifest():
+    return FileResponse(WEB / "manifest.webmanifest", media_type="application/manifest+json")
+
+
+@app.get("/sw.js")
+async def service_worker():
+    return FileResponse(WEB / "sw.js", media_type="application/javascript")
+
+
+@app.get("/icons/{name}")
+async def icon_file(name: str):
+    p = (WEB / "icons" / name).resolve()
+    if not str(p).startswith(str(WEB.resolve())) or not p.exists():
+        return JSONResponse({"error": "not found"}, status_code=404)
+    return FileResponse(p)
 
 
 @app.get("/api/state")
@@ -592,7 +683,7 @@ def apply_patch(patch):
             CFG["hotkey"] = v
             if HOTKEY:
                 HOTKEY.configure(hk_items())
-        elif k in ("monitor", "roi", "scene", "ai_mode", "port", "jpeg_quality", "max_image_dim", "custom_prompt", "knowledge"):
+        elif k in ("monitor", "roi", "scene", "ai_mode", "port", "jpeg_quality", "max_image_dim", "custom_prompt", "knowledge", "kb_auto_append", "verify_profile"):
             CFG[k] = v
     save_config(CFG)
     # restart watcher if poll params changed is unnecessary (read each loop)

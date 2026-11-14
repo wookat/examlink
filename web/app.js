@@ -115,7 +115,7 @@ syncFsIcon();
 
 // ---------------- display prefs (gaze / align / contrast / latest) ----------------
 const DISP_KEY = "examlink.disp";
-let DISP = { align: "center", cw: 80, contrast: "std", latestOnly: false, gaze: "", dot: false };
+let DISP = { align: "center", cw: 80, contrast: "std", latestOnly: false, gaze: "", dot: false, wake: true };
 try { Object.assign(DISP, JSON.parse(localStorage.getItem(DISP_KEY) || "{}")); } catch {}
 
 const GAZE_PRESETS = {
@@ -143,7 +143,9 @@ function applyDisp() {
   if ($("#contrastSw")) $("#contrastSw").checked = DISP.contrast === "high";
   if ($("#latestSw")) $("#latestSw").checked = !!DISP.latestOnly;
   if ($("#dotSw")) $("#dotSw").checked = !!DISP.dot;
+  if ($("#wakeSw")) $("#wakeSw").checked = !!DISP.wake;
   syncDotFab();
+  keepAwake();
 }
 function setGaze(g) {
   const p = GAZE_PRESETS[g]; if (!p) return;
@@ -170,6 +172,9 @@ $("#latestSw")?.addEventListener("change", e => {
 $("#dotSw")?.addEventListener("change", e => {
   DISP.dot = e.target.checked; applyDisp(); saveDisp();
 });
+$("#wakeSw")?.addEventListener("change", e => {
+  DISP.wake = e.target.checked; applyDisp(); saveDisp();
+});
 
 // ---------------- minimal dot mode (QuiteWin-style) ----------------
 let dotUnseen = 0;
@@ -189,6 +194,25 @@ document.addEventListener("keydown", e => {
   if (e.key === "Escape" && document.body.classList.contains("dot-open"))
     $("#dotFab").click();
 });
+// dot-mode action row mirrors the composer's buttons
+$("#dotCap")?.addEventListener("click", () => $("#btnCapture").click());
+$("#dotSnap")?.addEventListener("click", () => $("#btnSnap").click());
+$("#dotAbort")?.addEventListener("click", () => $("#btnAbort").click());
+new MutationObserver(() =>
+  $("#dotAbort")?.classList.toggle("hidden", $("#btnAbort").classList.contains("hidden"))
+).observe($("#btnAbort"), { attributes: true, attributeFilter: ["class"] });
+
+// ---------------- keep screen awake (PWA wake lock; no-op on insecure origins) ----------------
+let wakeLock = null;
+async function keepAwake() {
+  if (!DISP.wake) { try { await wakeLock?.release?.(); } catch {} wakeLock = null; return; }
+  try {
+    if ("wakeLock" in navigator && document.visibilityState === "visible")
+      wakeLock = await navigator.wakeLock.request("screen");
+  } catch {}
+}
+document.addEventListener("visibilitychange", keepAwake);
+wakeLock && wakeLock.addEventListener?.("release", () => { wakeLock = null; });
 
 // ---------------- device hotkeys (this browser page) ----------------
 const HK_KEY = "examlink.hk";
@@ -428,11 +452,26 @@ function setCardText(id, text, streaming) {
   c.el.querySelector(".ans-status").textContent = streaming ? "作答中" : "";
   scrollFeed();
 }
+/* question title line: first meaningful line of the reply, for feed scanning */
+function setCardTitle(el, text) {
+  const lines = (text || "").split("\n").map(l =>
+    l.replace(/^[#>*\-\s]+/, "").replace(/\*\*/g, "").trim()).filter(Boolean);
+  const title = lines.find(l => !/^答案[:：]/.test(l));
+  if (!title) return;
+  let sub = el.querySelector(".ans-sub");
+  if (!sub) {
+    sub = document.createElement("div"); sub.className = "ans-sub";
+    el.querySelector(".ans-head").after(sub);
+  }
+  sub.textContent = title.slice(0, 34);
+}
 function finishCard(id) {
   const c = cardById(id); if (!c) return;
   c.el.classList.remove("streaming");
   c.el.querySelector(".ans-status").textContent = "";
-  setAnsChipFromText(c.el, c.el._text || c.md.innerText);
+  const txt = c.el._text || c.md.innerText;
+  setCardTitle(c.el, txt);
+  setAnsChipFromText(c.el, txt);
 }
 function errCard(id, msg) {
   const c = cardById(id) || addCard({ id: id || ("e" + Date.now()), image: null, trigger: "err", tag: "错误" });
@@ -500,6 +539,18 @@ function handle(m) {
       else if (m.action === "nav_up") scrollPage(-1);
       break;
     }
+    case "verify": {
+      // dual-model cross-check result: chip on the card head
+      const c = cardById(m.id); if (!c) break;
+      let v = c.el.querySelector(".verify-chip");
+      if (!v) {
+        v = document.createElement("span"); v.className = "verify-chip";
+        c.el.querySelector(".ans-head").insertBefore(v, c.el.querySelector(".ans-time"));
+      }
+      if (m.agree) { v.className = "verify-chip ok"; v.textContent = "✓ 双模型一致"; v.title = m.model || ""; }
+      else { v.className = "verify-chip diff"; v.textContent = "⚠ 分歧→" + m.model + ": " + (m.alt || "?"); v.title = "两个模型答案不一致"; }
+      break;
+    }
     case "cleared": $("#answers").innerHTML = ""; ensureFeed(); updateNavCtl(); break;
     case "history": replayHistory(m.cards || []); break;
     case "bye": toast("服务已关闭"); break;
@@ -518,7 +569,7 @@ function replayHistory(cards) {
     setCardText(e.id, e.answer || fallback, false);
     if (e.error) card.el.classList.add("err-card");
     if (e.stopped && e.answer) card.md.innerHTML += '<div class="stopped-note">已停止（部分内容）</div>';
-    if (e.answer) setAnsChipFromText(card.el, e.answer);
+    if (e.answer) { setCardTitle(card.el, e.answer); setAnsChipFromText(card.el, e.answer); }
   }
   replaying = false;
   scrollFeed();
@@ -769,6 +820,18 @@ function syncProxyUI(s) {
     }
   }
   ps.value = s.active_profile || "";
+  const vs = $("#verifySel");
+  if (vs && vs.options.length !== Object.keys(profs).length + 1) {
+    vs.innerHTML = "";
+    const v0 = document.createElement("option"); v0.value = ""; v0.textContent = "关闭";
+    vs.appendChild(v0);
+    for (const [n, p] of Object.entries(profs)) {
+      const o = document.createElement("option"); o.value = n;
+      o.textContent = `${p.label} (${p.model})`;
+      vs.appendChild(o);
+    }
+  }
+  if (vs) vs.value = s.verify_profile || "";
 }
 
 function syncPromptUI(s) {
@@ -782,6 +845,7 @@ function syncPromptUI(s) {
       : "可在考试机创建 knowledge.md 存放更大知识库";
     $("#kbBadge").classList.toggle("hidden", !(s.knowledge || kf.exists));
   }
+  if ($("#kbAutoSw")) $("#kbAutoSw").checked = !!s.kb_auto_append;
 }
 
 function refreshScenePrompt() {
@@ -919,6 +983,14 @@ $("#btnSaveKb")?.addEventListener("click", () => {
   send({ t: "set", patch: { knowledge: $("#kbText").value.trim() } });
   toast("知识库已保存");
 });
+$("#kbAutoSw")?.addEventListener("change", e => {
+  send({ t: "set", patch: { kb_auto_append: e.target.checked } });
+  toast(e.target.checked ? "答过的题将自动收录进 knowledge.md" : "已关闭自动收录");
+});
+$("#verifySel")?.addEventListener("change", e => {
+  send({ t: "set", patch: { verify_profile: e.target.value } });
+  toast(e.target.value ? "双模型校验已开启" : "双模型校验已关闭");
+});
 
 $("#btnSaveCfg").onclick = saveCfg;
 $("#btnClearChat").onclick = () => {
@@ -1022,3 +1094,6 @@ ensureFeed();
 route();
 if (!TOKEN_FINAL) toast("URL 缺少 token，请从电脑上显示的链接打开", 4000);
 connect();
+keepAwake();
+// PWA: installable app shell (silent no-op on http LAN where SW is unavailable)
+if ("serviceWorker" in navigator) navigator.serviceWorker.register("/sw.js").catch(() => {});

@@ -28,5 +28,8 @@
   "scenes": {},
   "hotkey": {
     "items": []
-  }
+  },
+  "kb_auto_append": false,
+  "verify_profile": "",
+  "knowledge": ""
 }
