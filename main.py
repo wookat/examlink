@@ -14,6 +14,7 @@ WS protocol (JSON):
 
 import asyncio
 import base64
+import collections
 import json
 import os
 import socket
@@ -59,12 +60,45 @@ def save_config(cfg):
 CFG = load_config()
 HISTORY = []           # proxy-mode conversation (OpenAI messages format)
 CLIENTS = set()        # websocket connections
-STATE = {
-    "busy": False,
-    "last_capture": None,
-    "last_error": None,
-    "started": time.time(),
-}
+STATE = {"busy": False, "last_capture": None, "last_error": None, "qnum": 0}
+
+# ---------------- card history (survives client refresh + service restart) ----
+CARD_LOG = collections.deque(maxlen=60)
+HIST_PATH = BASE / "history.json"
+
+
+def _hist_save():
+    try:
+        HIST_PATH.write_text(json.dumps(list(CARD_LOG), ensure_ascii=False), encoding="utf-8")
+    except Exception:
+        pass
+
+
+def _hist_load():
+    try:
+        if HIST_PATH.exists():
+            for e in json.loads(HIST_PATH.read_text(encoding="utf-8"))[-60:]:
+                if isinstance(e, dict) and e.get("id"):
+                    CARD_LOG.append(e)
+    except Exception:
+        pass
+
+
+def log_card(entry):
+    CARD_LOG.append(entry)
+    _hist_save()
+
+
+def log_card_update(cid, **kw):
+    for e in reversed(CARD_LOG):
+        if e.get("id") == cid:
+            e.update(kw)
+            _hist_save()
+            return
+
+
+_hist_load()
+STATE.update({"started": time.time()})
 CURRENT_TASK = None
 
 
@@ -213,10 +247,14 @@ async def do_capture(trigger="manual", ask=True, question=""):
         await status("capture", trigger)
         img = await asyncio.to_thread(grab_current)
         b64, w, h, datauri = cap.encode_jpeg_b64(img, CFG.get("jpeg_quality", 88), CFG.get("max_image_dim", 2000))
+        STATE["qnum"] += 1
         cid = uuid.uuid4().hex[:10]
+        thumb = cap.encode_jpeg_b64(img, 55, 240)[3]
         STATE["last_capture"] = {"id": cid, "b64": b64, "w": w, "h": h, "ts": time.time()}
+        log_card({"id": cid, "kind": "cap", "trigger": trigger, "qnum": STATE["qnum"],
+                  "thumb": thumb, "ask": ask, "ts": time.time(), "answer": ""})
         await broadcast({"t": "capture", "id": cid, "image": datauri, "w": w, "h": h,
-                         "trigger": trigger, "ask": ask})
+                         "trigger": trigger, "ask": ask, "qnum": STATE["qnum"]})
         if ask and ai_mode() == "proxy":
             if STATE["busy"]:
                 await broadcast({"t": "error", "msg": "AI 正在生成中，本次截图未送答", "id": cid})
@@ -253,20 +291,28 @@ async def run_ai(cid, image_b64s, question, new_conv=False):
     STATE["busy"] = True
     await status("thinking", prov["name"] + "/" + prov["model"])
     full = []
+    sent_done = False
     try:
         async for piece in aimod.stream_chat(HISTORY, prov):
             full.append(piece)
             await broadcast({"t": "chunk", "id": cid, "text": piece})
         text = "".join(full) or "（模型没有返回内容）"
         HISTORY.append({"role": "assistant", "content": text})
+        sent_done = True
         await broadcast({"t": "done", "id": cid})
+    except asyncio.CancelledError:
+        log_card_update(cid, answer="".join(full), stopped=True)
+        raise
     except Exception as e:
         STATE["last_error"] = str(e)
+        log_card_update(cid, answer="".join(full), error=str(e))
         await broadcast({"t": "error", "msg": f"AI 请求失败: {e}", "id": cid})
         # roll back the unanswered user message
         if HISTORY and HISTORY[-1].get("role") == "user":
             HISTORY.pop()
     finally:
+        if sent_done:
+            log_card_update(cid, answer="".join(full), done=True)
         STATE["busy"] = False
         if CURRENT_TASK is asyncio.current_task():
             CURRENT_TASK = None
@@ -447,6 +493,10 @@ async def ws_endpoint(ws: WebSocket):
     CLIENTS.add(ws)
     try:
         await ws.send_text(json.dumps({"t": "state", **public_state()}, ensure_ascii=False))
+        if CARD_LOG:
+            await ws.send_text(json.dumps(
+                {"t": "history", "cards": list(CARD_LOG), "qnum": STATE["qnum"]},
+                ensure_ascii=False))
         while True:
             raw = await ws.receive_text()
             try:
@@ -478,16 +528,21 @@ async def handle_msg(ws, msg):
             return
         cid = uuid.uuid4().hex[:10]
         STATE["busy"] = True
+        log_card({"id": cid, "kind": "ask", "q": (q or "")[:80],
+                  "qnum": STATE["qnum"], "ts": time.time(), "answer": ""})
         global CURRENT_TASK
         CURRENT_TASK = asyncio.create_task(run_ai(cid, images, q, new_conv=bool(msg.get("new"))))
-        await ws.send_text(json.dumps({"t": "ask_ack", "id": cid}))
+        await ws.send_text(json.dumps({"t": "ask_ack", "id": cid, "qnum": STATE["qnum"]}))
     elif t == "set":
         patch = msg.get("patch", {})
         apply_patch(patch)
         await broadcast({"t": "state", **public_state()})
     elif t == "clear":
         HISTORY.clear()
-        await ws.send_text(json.dumps({"t": "cleared"}))
+        CARD_LOG.clear()
+        STATE["qnum"] = 0
+        _hist_save()
+        await broadcast({"t": "cleared"})
     elif t == "abort":
         if CURRENT_TASK and not CURRENT_TASK.done():
             CURRENT_TASK.cancel()

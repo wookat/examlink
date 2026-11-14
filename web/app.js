@@ -237,7 +237,7 @@ window.addEventListener("contextmenu", (e) => { if (recording) e.preventDefault(
 
 // ---------------- card navigation (prev/next question, page scroll) ----------------
 function navCard(dir) {
-  const cards = [...document.querySelectorAll("#answers .ans")];
+  const cards = groupAnchors();
   if (!cards.length) return;
   const feed = $("#answers");
   const ft = feed.getBoundingClientRect().top + 10;
@@ -245,6 +245,15 @@ function navCard(dir) {
   if (idx < 0) idx = cards.length - 1;
   idx = Math.min(cards.length - 1, Math.max(0, idx + dir));
   cards[idx].scrollIntoView({ behavior: "smooth", block: "start" });
+}
+/* first card of each question group (same-qnum cards collapse into one stop) */
+function groupAnchors() {
+  const seen = new Set(), anchors = [];
+  document.querySelectorAll("#answers .ans").forEach(c => {
+    const q = c.dataset.qnum;
+    if (!q || !seen.has(q)) { if (q) seen.add(q); anchors.push(c); }
+  });
+  return anchors;
 }
 function scrollPage(dir) {
   const feed = $("#answers");
@@ -276,13 +285,15 @@ function ensureFeed() {
 }
 function scrollFeed() { const f = $("#answers"); f.scrollTop = f.scrollHeight; }
 
-function addCard({ id, image, trigger, tag }) {
+function addCard({ id, image, trigger, tag, qnum }) {
   const feed = $("#answers");
   feed.querySelector(".empty-feed")?.remove();
   const div = document.createElement("div");
   div.className = "ans" + (tag === "err" ? " err-card" : ""); div.id = "card-" + id;
+  if (qnum) div.dataset.qnum = qnum;
   const cls = tag === "错误" ? "err" : trigger === "auto" ? "auto" : trigger === "ask" ? "ask" : "shot";
-  div.innerHTML = `<div class="ans-head"><span class="tag ${cls}">${tag || trigger || ""}</span><span class="ans-time">${fmtTime()}</span></div><div class="md"></div>`;
+  div.innerHTML = `<div class="ans-head"><span class="qchip hidden"></span><span class="tag ${cls}">${tag || trigger || ""}</span><span class="ans-time">${fmtTime()}</span><button class="copy-btn" title="复制答案"><svg class="ico" viewBox="0 0 24 24"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg></button></div><div class="md"></div>`;
+  div.querySelector(".copy-btn").onclick = () => copyText(div.querySelector(".md").innerText);
   if (image) {
     const img = document.createElement("img");
     img.className = "shot-thumb"; img.src = image; img.loading = "lazy";
@@ -290,9 +301,49 @@ function addCard({ id, image, trigger, tag }) {
     div.querySelector(".ans-head").appendChild(img);
   }
   feed.appendChild(div);
+  updateQChips();
   updateNavCtl();
   scrollFeed();
   return { el: div, md: div.querySelector(".md") };
+}
+function copyText(t) {
+  if (!t || !t.trim()) { toast("没有可复制的内容"); return; }
+  if (navigator.clipboard && window.isSecureContext) {
+    navigator.clipboard.writeText(t).then(() => toast("已复制"), () => legacyCopy(t));
+  } else legacyCopy(t);
+}
+function legacyCopy(t) {
+  const ta = document.createElement("textarea");
+  ta.value = t; ta.style.cssText = "position:fixed;opacity:0";
+  document.body.appendChild(ta); ta.select();
+  try { document.execCommand("copy"); toast("已复制"); }
+  catch { toast("复制失败，请长按文本手动复制"); }
+  ta.remove();
+}
+/* 第N题 chip: shown only on the first card of each question group */
+function updateQChips() {
+  const seen = new Set();
+  document.querySelectorAll("#answers .ans").forEach(c => {
+    const chip = c.querySelector(".qchip");
+    if (!chip) return;
+    const q = c.dataset.qnum;
+    if (q && !seen.has(q)) {
+      seen.add(q);
+      chip.textContent = "第 " + q + " 题";
+      chip.classList.remove("hidden");
+    } else chip.classList.add("hidden");
+  });
+}
+/* extract "**答案：X**" from finished text -> header chip for quick scanning */
+function setAnsChipFromText(el, text) {
+  const m = text && text.match(/答案[:：]\s*\**\s*([^\n*]{1,24})/);
+  if (!m) return;
+  let chip = el.querySelector(".ans-ans");
+  if (!chip) {
+    chip = document.createElement("span"); chip.className = "ans-ans";
+    el.querySelector(".ans-head").insertBefore(chip, el.querySelector(".ans-time"));
+  }
+  chip.textContent = "答案 " + m[1].trim().replace(/\*+$/, "");
 }
 function cardById(id) {
   const el = document.getElementById("card-" + id);
@@ -304,7 +355,11 @@ function setCardText(id, text, streaming) {
   c.el.classList.toggle("streaming", !!streaming);
   scrollFeed();
 }
-function finishCard(id) { const c = cardById(id); if (c) c.el.classList.remove("streaming"); }
+function finishCard(id) {
+  const c = cardById(id); if (!c) return;
+  c.el.classList.remove("streaming");
+  setAnsChipFromText(c.el, c.el._text || c.md.innerText);
+}
 function errCard(id, msg) {
   const c = cardById(id) || addCard({ id: id || ("e" + Date.now()), image: null, trigger: "err", tag: "错误" });
   c.md.innerHTML = `<span style="color:var(--danger)">${md(msg)}</span>`;
@@ -356,7 +411,7 @@ function handle(m) {
     case "error": toast(m.msg || "错误", 3500); if (m.id) errCard(m.id, m.msg); $("#busyDot")?.classList.add("hidden"); $("#btnAbort")?.classList.add("hidden"); break;
     case "status": if (m.stage === "idle") { $("#busyDot")?.classList.add("hidden"); $("#btnAbort")?.classList.add("hidden"); } break;
     case "ask_ack": {
-      const card = addCard({ id: m.id, image: null, trigger: "ask", tag: "追问" });
+      const card = addCard({ id: m.id, image: null, trigger: "ask", tag: "追问", qnum: m.qnum });
       card.el._text = "";
       setCardText(m.id, "⏳ 思考中…", true);
       $("#busyDot")?.classList.remove("hidden");
@@ -371,18 +426,34 @@ function handle(m) {
       break;
     }
     case "cleared": $("#answers").innerHTML = ""; ensureFeed(); updateNavCtl(); break;
+    case "history": replayHistory(m.cards || []); break;
     case "bye": toast("服务已关闭"); break;
   }
 }
 
 // ---------------- capture ----------------
+function replayHistory(cards) {
+  for (const e of cards) {
+    const isAsk = e.kind === "ask";
+    const tag = isAsk ? "追问" : (e.trigger === "auto" ? "自动截图" : (e.ask ? "AI答题" : "截图"));
+    const card = addCard({ id: e.id, image: e.thumb || null, trigger: isAsk ? "ask" : e.trigger, tag, qnum: e.qnum });
+    card.el._text = e.answer || "";
+    const fallback = isAsk ? (e.q ? "追问：" + e.q : "追问") : "（仅截图，未请求 AI）";
+    setCardText(e.id, e.answer || fallback, false);
+    if (e.error) card.el.classList.add("err-card");
+    if (e.stopped && e.answer) card.md.innerHTML += '<div class="stopped-note">已停止（部分内容）</div>';
+    if (e.answer) setAnsChipFromText(card.el, e.answer);
+  }
+  scrollFeed();
+}
+
 function onCapture(m) {
   window._lastB64 = b64Of(m.image);
   if (aiMode === "direct" && m.ask) {
     directAsk({ images: [window._lastB64], q: "", newConv: true, trigger: m.trigger, image: m.image });
   } else {
     const tag = m.trigger === "auto" ? "自动截图" : (m.ask ? "AI答题" : "截图");
-    const card = addCard({ id: m.id, image: m.image, trigger: m.trigger, tag });
+    const card = addCard({ id: m.id, image: m.image, trigger: m.trigger, tag, qnum: m.qnum });
     card.el._text = "";
     if (!m.ask) { setCardText(m.id, "（仅截图，未请求 AI）", false); card.el.querySelector(".tag").textContent = "截图"; card.el.querySelector(".tag").className = "tag shot"; }
     if (m.ask && aiMode === "proxy") {
