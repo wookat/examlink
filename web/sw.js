@@ -1,5 +1,6 @@
-const CACHE = "examlink-v2";
+const CACHE = "examlink-v3";
 const SHELL = ["/", "/style.css", "/app.js", "/manifest.webmanifest",
+               "/vendor/swiper-bundle.min.css", "/vendor/swiper-bundle.min.js",
                "/icons/icon128.png", "/icons/icon192.png", "/icons/icon512.png"];
 self.addEventListener("install", e => {
   e.waitUntil(caches.open(CACHE).then(c => c.addAll(SHELL)).then(() => self.skipWaiting()));

@@ -535,6 +535,14 @@ async def icon_file(name: str):
     return FileResponse(p)
 
 
+@app.get("/vendor/{name}")
+async def vendor_file(name: str):
+    p = (WEB / "vendor" / name).resolve()
+    if not str(p).startswith(str(WEB.resolve())) or not p.exists():
+        return JSONResponse({"error": "not found"}, status_code=404)
+    return FileResponse(p)
+
+
 @app.get("/api/state")
 async def api_state(request: Request):
     if not auth(request):

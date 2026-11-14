@@ -402,6 +402,7 @@ function syncDotFab() {
 $("#dotFab").onclick = () => {
   const open = !document.body.classList.contains("dot-open");
   document.body.classList.toggle("dot-open", open);
+  markCurGroup();
   if (open) { dotUnseen = 0; scrollFeed(); updateNavCtl(); }
   syncDotFab();
   $("#dotFab").setAttribute("aria-label", open ? "收起答案" : "展开答案");
@@ -577,19 +578,19 @@ window.addEventListener("resize", applyDisp);
 
 // ---------------- cards ----------------
 function ensureFeed() {
-  let f = $("#answers");
-  if (!f.querySelector(".ans") && !f.querySelector(".empty-feed")) {
-    f.innerHTML = `<div class="empty-feed"><div><div class="big">◈</div>截图或自动触发后，答案会显示在这里</div></div>`;
+  let w = $("#ansWrap");
+  if (!w.querySelector(".ans") && !w.querySelector(".empty-feed")) {
+    w.innerHTML = `<div class="empty-feed"><div><div class="big">◈</div>截图或自动触发后，答案会显示在这里</div></div>`;
   }
 }
 function scrollFeed() { if (DISP.index) return; const f = $("#answers"); f.scrollTop = f.scrollHeight; }
 
 let replaying = false;
 function addCard({ id, image, trigger, tag, qnum }) {
-  const feed = $("#answers");
-  feed.querySelector(".empty-feed")?.remove();
+  const wrap = $("#ansWrap");
+  wrap.querySelector(".empty-feed")?.remove();
   const div = document.createElement("div");
-  div.className = "ans" + (tag === "err" ? " err-card" : ""); div.id = "card-" + id;
+  div.className = "ans swiper-slide" + (tag === "err" ? " err-card" : ""); div.id = "card-" + id;
   if (qnum) div.dataset.qnum = qnum;
   const cls = tag === "错误" ? "err" : trigger === "auto" ? "auto" : trigger === "ask" ? "ask" : "shot";
   div.innerHTML = `<div class="ans-head"><span class="qchip hidden"></span><span class="tag ${cls}">${tag || trigger || ""}</span><span class="ans-status"></span><span class="ans-time">${fmtTime()}</span><button class="copy-btn" title="复制答案"><svg class="ico" viewBox="0 0 24 24"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg></button></div><div class="md"></div>`;
@@ -600,7 +601,7 @@ function addCard({ id, image, trigger, tag, qnum }) {
     img.onclick = () => openLightbox(image);
     div.querySelector(".ans-head").appendChild(img);
   }
-  feed.appendChild(div);
+  wrap.appendChild(div);
   deckFocus = -1;                 /* new card → deck jumps to the latest */
   markCurGroup();
   if (DISP.dot && !replaying && !document.body.classList.contains("dot-open")) {
@@ -818,7 +819,7 @@ function handle(m) {
       else { v.className = "verify-chip diff"; v.textContent = "⚠ 分歧→" + m.model + ": " + (m.alt || "?"); v.title = "两个模型答案不一致"; }
       break;
     }
-    case "cleared": $("#answers").innerHTML = ""; ensureFeed(); updateNavCtl(); break;
+    case "cleared": $("#ansWrap").innerHTML = ""; ensureFeed(); updateNavCtl(); break;
     case "history": replayHistory(m.cards || []); break;
     case "bye": toast("服务已关闭"); break;
   }
@@ -1269,7 +1270,7 @@ $("#fallbackSel")?.addEventListener("change", e => {
 
 $("#btnSaveCfg").onclick = saveCfg;
 $("#btnClearChat").onclick = () => {
-  $("#answers").innerHTML = ""; directHistory = []; ensureFeed();
+  $("#ansWrap").innerHTML = ""; directHistory = []; ensureFeed();
   send({ t: "clear" }); toast("记录已清空");
 };
 $("#btnShutdown").onclick = () => {
