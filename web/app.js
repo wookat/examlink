@@ -79,7 +79,7 @@ function md(src) {
 
 // ---------------- font scaling ----------------
 function applyFont(px) {
-  fontPx = Math.min(36, Math.max(14, px));
+  fontPx = Math.min(72, Math.max(14, px));
   document.documentElement.style.setProperty("--fs", fontPx + "px");
   localStorage.setItem(LS.font, String(fontPx));
   $("#fontPct").textContent = Math.round(fontPx / 20 * 100) + "%";
@@ -115,7 +115,7 @@ syncFsIcon();
 
 // ---------------- display prefs (gaze / align / contrast / latest) ----------------
 const DISP_KEY = "examlink.disp";
-let DISP = { align: "center", cw: 80, contrast: "std", latestOnly: false, gaze: "" };
+let DISP = { align: "center", cw: 80, contrast: "std", latestOnly: false, gaze: "", dot: false };
 try { Object.assign(DISP, JSON.parse(localStorage.getItem(DISP_KEY) || "{}")); } catch {}
 
 const GAZE_PRESETS = {
@@ -130,6 +130,8 @@ function applyDisp() {
   document.body.dataset.align = DISP.align;
   document.body.dataset.contrast = DISP.contrast;
   document.body.classList.toggle("latest-only", !!DISP.latestOnly);
+  document.body.classList.toggle("dot-mode", !!DISP.dot);
+  if (!DISP.dot) document.body.classList.remove("dot-open");
   const narrow = window.matchMedia("(max-width: 640px)").matches;
   $("#view-live").style.setProperty("--cw", (narrow ? Math.max(DISP.cw, 86) : DISP.cw) + "%");
   // settings sync
@@ -140,6 +142,8 @@ function applyDisp() {
   if ($("#widthRange")) { $("#widthRange").value = DISP.cw; $("#vWidth").textContent = DISP.cw + "%"; }
   if ($("#contrastSw")) $("#contrastSw").checked = DISP.contrast === "high";
   if ($("#latestSw")) $("#latestSw").checked = !!DISP.latestOnly;
+  if ($("#dotSw")) $("#dotSw").checked = !!DISP.dot;
+  syncDotFab();
 }
 function setGaze(g) {
   const p = GAZE_PRESETS[g]; if (!p) return;
@@ -162,6 +166,28 @@ $("#contrastSw")?.addEventListener("change", e => {
 });
 $("#latestSw")?.addEventListener("change", e => {
   DISP.latestOnly = e.target.checked; applyDisp(); saveDisp();
+});
+$("#dotSw")?.addEventListener("change", e => {
+  DISP.dot = e.target.checked; applyDisp(); saveDisp();
+});
+
+// ---------------- minimal dot mode (QuiteWin-style) ----------------
+let dotUnseen = 0;
+function syncDotFab() {
+  $("#dotFab").classList.toggle("hidden", !DISP.dot);
+  $("#dotBadge").classList.toggle("hidden", !dotUnseen);
+  $("#dotBadge").textContent = dotUnseen > 9 ? "9+" : dotUnseen;
+}
+$("#dotFab").onclick = () => {
+  const open = !document.body.classList.contains("dot-open");
+  document.body.classList.toggle("dot-open", open);
+  if (open) { dotUnseen = 0; scrollFeed(); updateNavCtl(); }
+  syncDotFab();
+  $("#dotFab").setAttribute("aria-label", open ? "收起答案" : "展开答案");
+};
+document.addEventListener("keydown", e => {
+  if (e.key === "Escape" && document.body.classList.contains("dot-open"))
+    $("#dotFab").click();
 });
 
 // ---------------- device hotkeys (this browser page) ----------------
@@ -309,6 +335,7 @@ function ensureFeed() {
 }
 function scrollFeed() { const f = $("#answers"); f.scrollTop = f.scrollHeight; }
 
+let replaying = false;
 function addCard({ id, image, trigger, tag, qnum }) {
   const feed = $("#answers");
   feed.querySelector(".empty-feed")?.remove();
@@ -316,7 +343,7 @@ function addCard({ id, image, trigger, tag, qnum }) {
   div.className = "ans" + (tag === "err" ? " err-card" : ""); div.id = "card-" + id;
   if (qnum) div.dataset.qnum = qnum;
   const cls = tag === "错误" ? "err" : trigger === "auto" ? "auto" : trigger === "ask" ? "ask" : "shot";
-  div.innerHTML = `<div class="ans-head"><span class="qchip hidden"></span><span class="tag ${cls}">${tag || trigger || ""}</span><span class="ans-time">${fmtTime()}</span><button class="copy-btn" title="复制答案"><svg class="ico" viewBox="0 0 24 24"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg></button></div><div class="md"></div>`;
+  div.innerHTML = `<div class="ans-head"><span class="qchip hidden"></span><span class="tag ${cls}">${tag || trigger || ""}</span><span class="ans-status"></span><span class="ans-time">${fmtTime()}</span><button class="copy-btn" title="复制答案"><svg class="ico" viewBox="0 0 24 24"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg></button></div><div class="md"></div>`;
   div.querySelector(".copy-btn").onclick = () => copyText(div.querySelector(".md").innerText);
   if (image) {
     const img = document.createElement("img");
@@ -325,6 +352,11 @@ function addCard({ id, image, trigger, tag, qnum }) {
     div.querySelector(".ans-head").appendChild(img);
   }
   feed.appendChild(div);
+  if (DISP.dot && !replaying && !document.body.classList.contains("dot-open")) {
+    dotUnseen++; syncDotFab();
+    $("#dotFab").classList.add("pulse");
+    setTimeout(() => $("#dotFab").classList.remove("pulse"), 1200);
+  }
   updateQChips();
   updateNavCtl();
   scrollFeed();
@@ -358,16 +390,32 @@ function updateQChips() {
     } else chip.classList.add("hidden");
   });
 }
-/* extract "**答案：X**" from finished text -> header chip for quick scanning */
+/* extract "**答案：X**" from finished text -> header chip + glanceable hero with collapsible reasoning */
 function setAnsChipFromText(el, text) {
   const m = text && text.match(/答案[:：]\s*\**\s*([^\n*]{1,24})/);
   if (!m) return;
+  const ans = m[1].trim().replace(/\*+$/, "");
   let chip = el.querySelector(".ans-ans");
   if (!chip) {
     chip = document.createElement("span"); chip.className = "ans-ans";
     el.querySelector(".ans-head").insertBefore(chip, el.querySelector(".ans-time"));
   }
-  chip.textContent = "答案 " + m[1].trim().replace(/\*+$/, "");
+  chip.textContent = "答案 " + ans;
+  // Cluely-style layering: big answer first, reasoning folded behind a toggle
+  let hero = el.querySelector(".ans-hero");
+  if (!hero) {
+    hero = document.createElement("div"); hero.className = "ans-hero";
+    const tog = document.createElement("button");
+    tog.className = "detail-toggle"; tog.textContent = "解析 ▾";
+    tog.onclick = () => {
+      const open = el.classList.toggle("detail-open");
+      tog.textContent = open ? "收起解析 ▴" : "解析 ▾";
+    };
+    el.insertBefore(hero, el.querySelector(".md"));
+    el.insertBefore(tog, el.querySelector(".md"));
+    el.classList.add("has-hero");
+  }
+  hero.textContent = ans;
 }
 function cardById(id) {
   const el = document.getElementById("card-" + id);
@@ -377,17 +425,20 @@ function setCardText(id, text, streaming) {
   const c = cardById(id); if (!c) return;
   c.md.innerHTML = md(text);
   c.el.classList.toggle("streaming", !!streaming);
+  c.el.querySelector(".ans-status").textContent = streaming ? "作答中" : "";
   scrollFeed();
 }
 function finishCard(id) {
   const c = cardById(id); if (!c) return;
   c.el.classList.remove("streaming");
+  c.el.querySelector(".ans-status").textContent = "";
   setAnsChipFromText(c.el, c.el._text || c.md.innerText);
 }
 function errCard(id, msg) {
   const c = cardById(id) || addCard({ id: id || ("e" + Date.now()), image: null, trigger: "err", tag: "错误" });
   c.md.innerHTML = `<span style="color:var(--danger)">${md(msg)}</span>`;
   c.el.classList.remove("streaming");
+  c.el.querySelector(".ans-status").textContent = "";
 }
 
 function openLightbox(src) {
@@ -457,6 +508,7 @@ function handle(m) {
 
 // ---------------- capture ----------------
 function replayHistory(cards) {
+  replaying = true;
   for (const e of cards) {
     const isAsk = e.kind === "ask";
     const tag = isAsk ? "追问" : (e.trigger === "auto" ? "自动截图" : (e.ask ? "AI答题" : "截图"));
@@ -468,6 +520,7 @@ function replayHistory(cards) {
     if (e.stopped && e.answer) card.md.innerHTML += '<div class="stopped-note">已停止（部分内容）</div>';
     if (e.answer) setAnsChipFromText(card.el, e.answer);
   }
+  replaying = false;
   scrollFeed();
 }
 
