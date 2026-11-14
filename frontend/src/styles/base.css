@@ -536,30 +536,6 @@ body[data-align="right"][data-deck="left"].idx-mode:not(.dot-open) .feed.rail-mo
   border: 1px solid var(--border);
 }
 
-/* card-width grip — pinned to the hero card's edge, scrolls with the card */
-.ans .hgrip {
-  position: absolute; top: 84px; right: -9px; z-index: 6;
-  width: 17px; height: 52px; border-radius: 9px;
-  background: var(--card-solid); border: 1px solid var(--border-strong);
-  display: grid; place-items: center;
-  cursor: col-resize; opacity: .45;
-  transition: opacity .15s, border-color .15s;
-  box-shadow: 0 4px 14px rgba(0,0,0,.4); touch-action: none;
-}
-.ans .hgrip::after {
-  content: ""; width: 6px; height: 22px;
-  border-left: 2px solid var(--faint); border-right: 2px solid var(--faint);
-  border-radius: 1px;
-}
-.ans .hgrip:hover { opacity: 1; border-color: var(--accent); }
-body[data-deck="right"] .ans .hgrip { right: auto; left: -9px; }
-body[data-deck="top"] .ans .hgrip { top: auto; bottom: -9px; right: 46%; left: auto;
-  width: 52px; height: 17px; cursor: row-resize; }
-body[data-deck="top"] .ans .hgrip::after { width: 22px; height: 6px; border: none;
-  border-top: 2px solid var(--faint); border-bottom: 2px solid var(--faint); }
-@media (max-width: 700px) { .ans .hgrip { display: none !important; } }
-body.dot-mode .ans .hgrip { display: none; }
-
 /* ---------- composer: floating card, collapsible to a bottom tab ---------- */
 .composer {
   position: sticky; bottom: 0; z-index: 40;

@@ -4,7 +4,6 @@ import type { CardItem } from "../types";
 import { md } from "../utils/md";
 import { copyText, useUiStore } from "../stores/ui";
 import { useCardsStore } from "../stores/cards";
-import { useDispStore } from "../stores/disp";
 
 const props = defineProps<{
   card: CardItem;
@@ -19,39 +18,6 @@ const props = defineProps<{
 
 const ui = useUiStore();
 const cards = useCardsStore();
-const disp = useDispStore();
-
-/* grip on the hero's inner edge — drag horizontally to resize the card
-   (stack/top: content width; rail side layouts: the rail width) */
-function onGrip(e: PointerEvent) {
-  e.preventDefault(); e.stopPropagation();
-  const vw = window.innerWidth;
-  const deck = document.body.dataset.deck;
-  const railMode = deck === "left" || deck === "right";
-  const live = document.getElementById("view-live");
-  const move = (ev: PointerEvent) => {
-    const x = ev.clientX;
-    if (railMode) {
-      const px = deck === "left" ? vw - x : x;
-      live?.style.setProperty("--rail-w", Math.min(560, Math.max(200, Math.round(px))) + "px");
-    } else {
-      const pct = disp.align === "left" ? x / vw * 100
-        : disp.align === "right" ? (vw - x) / vw * 100
-        : Math.abs(vw / 2 - x) * 2 / vw * 100;
-      disp.cw = Math.min(100, Math.max(30, Math.round(pct)));
-      disp.gaze = "";
-    }
-  };
-  const up = () => {
-    disp.save();
-    window.removeEventListener("pointermove", move);
-    window.removeEventListener("pointerup", up);
-    window.removeEventListener("pointercancel", up);
-  };
-  window.addEventListener("pointermove", move);
-  window.addEventListener("pointerup", up);
-  window.addEventListener("pointercancel", up);
-}
 
 const tagCls = computed(() => {
   if (props.card.tag === "错误" || props.card.error) return "err";
@@ -126,7 +92,5 @@ function onPeekClick(e: MouseEvent) {
 
     <div class="md" :class="{ 'md-err': card.error }" v-html="bodyHtml"></div>
     <div v-if="card.stopped" class="stopped-note">已停止（部分内容）</div>
-    <span v-if="indexMode && cur && rep" class="hgrip" title="拖动调整卡片宽度"
-          @pointerdown="onGrip" @click.stop></span>
   </article>
 </template>
