@@ -248,13 +248,11 @@ body.latest-only .feed > .ans:not(:last-child) { display: none; }
 }
 @keyframes blink { 50% { opacity: 0; } }
 
-/* current-question card row: keywords+thumb one side, giant letter the other.
-   default letter-on-right per sketch; body[data-hero="left"] flips it. */
+/* current-question card row: keywords+thumb one side, giant letter the other */
 .qrow {
   display: flex; align-items: center; gap: 16px;
   cursor: pointer; padding: 4px 0 2px;
 }
-body[data-hero="left"] .qrow { flex-direction: row-reverse; }
 .qinfo { flex: 1 1 auto; min-width: 0; }
 .qinfo .ans-sub { margin: 0 0 6px; }
 .qinfo .shot-thumb { display: block; margin-top: 6px; }
@@ -398,20 +396,43 @@ body[data-deck="top"][data-align="right"].idx-mode:not(.dot-open) .feed.rail-mod
 body[data-deck="top"][data-align="right"].idx-mode:not(.dot-open) .feed.rail-mode .rail { align-self: flex-end; margin-right: var(--pad); }
 
 /* hero internals emphasised — the current question + answer are the focus */
-body.idx-mode:not(.dot-open) .ans.q-hero { padding: 20px 24px; }
+body.idx-mode:not(.dot-open) .ans.q-hero { padding: 26px 30px; }
 body.idx-mode:not(.dot-open) .ans.q-hero .ans-head { font-size: calc(var(--fs-m, 12px) * 1.06); }
 body.idx-mode:not(.dot-open) .ans.q-hero .ans-sub {
-  font-size: calc(var(--fs-t, 14px) * 1.22); -webkit-line-clamp: 3;
+  font-size: calc(var(--fs-t, 14px) * 1.35); -webkit-line-clamp: 3;
 }
-body.idx-mode:not(.dot-open) .ans.q-hero .qrow { gap: 22px; padding: 8px 0 6px; }
 body.idx-mode:not(.dot-open) .ans.q-hero .qbig .ql {
-  font-size: min(calc(var(--fs-h, var(--fs)) * 1.3), 16vw);
+  font-size: min(calc(var(--fs-h, var(--fs)) * 1.9), 15vw);
+}
+body.idx-mode:not(.dot-open) .ans.q-hero .qbig .qr {
+  font-size: calc(var(--fs-h, var(--fs)) * .34); max-width: 14em;
 }
 body.idx-mode:not(.dot-open) .ans.q-hero.detail-open .qbig .ql {
-  font-size: min(calc(var(--fs-h, var(--fs)) * .7), 12vw);
+  font-size: min(calc(var(--fs-h, var(--fs)) * .75), 12vw);
 }
 body.idx-mode:not(.dot-open) .ans.q-hero .md { font-size: calc(var(--fs-a, var(--fs)) * 1.05); }
-body.idx-mode:not(.dot-open) .ans.q-hero .shot-thumb { width: 88px; max-height: 60px; }
+body.idx-mode:not(.dot-open) .ans.q-hero .shot-thumb { width: 96px; max-height: 66px; }
+
+/* question stacked directly above the answer — both track the content
+   alignment (left / center / right) instead of splitting to the edges */
+body.idx-mode:not(.dot-open) .ans.q-hero .qrow,
+body:not(.idx-mode) .ans.has-hero .qrow {
+  flex-direction: column; gap: 10px; padding: 8px 0 6px;
+}
+body[data-align="left"] .ans.q-hero .qrow,
+body[data-align="left"]:not(.idx-mode) .ans.has-hero .qrow { align-items: flex-start; text-align: left; }
+body[data-align="center"] .ans.q-hero .qrow,
+body[data-align="center"]:not(.idx-mode) .ans.has-hero .qrow { align-items: center; text-align: center; }
+body[data-align="right"] .ans.q-hero .qrow,
+body[data-align="right"]:not(.idx-mode) .ans.has-hero .qrow { align-items: flex-end; text-align: right; }
+body[data-align="left"] .ans.q-hero .qbig,
+body[data-align="left"]:not(.idx-mode) .ans.has-hero .qbig { align-items: flex-start; }
+body[data-align="right"] .ans.q-hero .qbig,
+body[data-align="right"]:not(.idx-mode) .ans.has-hero .qbig { align-items: flex-end; }
+body[data-align="center"] .ans.q-hero .detail-toggle,
+body[data-align="center"]:not(.idx-mode) .ans.has-hero .detail-toggle { margin-inline: auto; }
+body[data-align="right"] .ans.q-hero .detail-toggle,
+body[data-align="right"]:not(.idx-mode) .ans.has-hero .detail-toggle { margin-left: auto; }
 
 /* ---------- rail layout (desktop, body[data-deck]=left|right|top):
    hero takes the main zone, scrollable history rail sits on the other side.
