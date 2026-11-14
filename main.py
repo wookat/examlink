@@ -30,6 +30,7 @@ import hotkeys as hkmod
 import ocr as ocrom
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect, Request
 from fastapi.responses import FileResponse, JSONResponse, Response, StreamingResponse
+from PIL import Image
 
 if getattr(sys, "frozen", False):
     # PyInstaller bundle: read-only assets in _MEIPASS, writable files next to the exe
@@ -310,15 +311,20 @@ def grab_current():
 
 
 def grab_watch():
-    """Grab just the watched area (ROI or full screen) for diffing."""
+    """Grab just the watched area (ROI or full screen) for diffing.
+
+    Returns the raw mss ScreenShot — the watcher samples its signature
+    strided off the BGRA buffer (zero-copy), never materializing a PIL
+    image. That keeps each poll ~25MB of churn lighter than the old
+    PIL->ndarray path."""
     idx = cap.effective_index(CFG.get("monitor"))
     mon = cap.monitors()[idx] if idx < len(cap.monitors()) else cap.primary_monitor()
     roi = CFG.get("roi")
     if roi:
         rect = cap.norm_to_pixels(roi, mon)
         if rect and rect[2] > 8 and rect[3] > 8:
-            return cap.grab_region(idx, rect)
-    return cap.grab_monitor(idx)[0]
+            return cap.grab_region_shot(idx, rect)
+    return cap.grab_monitor_shot(idx)[0]
 
 
 async def do_capture(trigger="manual", ask=True, question=""):
@@ -437,7 +443,7 @@ async def run_ai(cid, image_b64s, question, new_conv=False):
 
 def make_watcher():
     watcher = cap.DiffWatcher(on_trigger=on_auto_trigger, cfg_getter=lambda: CFG,
-                              grab_fn=grab_watch, thumb_fn=cap.sig_of)
+                              grab_fn=grab_watch, thumb_fn=cap.sig_any)
 
     def busy():
         return STATE["busy"] or CURRENT_TASK is not None and not CURRENT_TASK.done()
@@ -606,19 +612,36 @@ async def preview_mjpg(request: Request):
 
     async def gen():
         boundary = b"frame"
+        last_sig = None
         while True:
             try:
-                img = await asyncio.to_thread(grab_monitor_full)
-                # small preview: cap width ~960 for bandwidth
-                w, h = img.size
-                scale = min(1.0, 960 / w)
-                if scale < 1.0:
-                    img = img.resize((int(w * scale), int(h * scale)))
-                b, _, _ = cap.encode_jpeg(img, 70, 960)
-                yield (b"--" + boundary + b"\r\nContent-Type: image/jpeg\r\n\r\n" + b + b"\r\n")
+                # Piggyback on the watcher's frame when auto-detect is on —
+                # zero extra screen grabs. Own grab (≈2.5fps) only as fallback.
+                shot = None
+                shared = WATCHER.last_shot if WATCHER is not None else None
+                if shared is not None and time.time() - WATCHER.last_shot_ts < 1.5:
+                    mon = cap.monitors()[cap.effective_index(CFG.get("monitor"))]
+                    # a region (ROI) shot isn't a full-screen preview frame
+                    if shared.size[0] == mon["width"] and shared.size[1] == mon["height"]:
+                        shot = shared
+                if shot is None:
+                    shot = await asyncio.to_thread(
+                        lambda: cap.grab_monitor_shot(cap.effective_index(CFG.get("monitor")))[0])
+                sig = cap.sig_of_shot(shot)
+                # Screen didn't move -> keep the last frame on the wire,
+                # skip the resize+encode pass entirely.
+                if last_sig is None or cap.diff_ratio(sig, last_sig) > 0.004:
+                    last_sig = sig
+                    img = Image.frombytes("RGB", shot.size, shot.bgra, "raw", "BGRX")
+                    w, h = img.size
+                    scale = min(1.0, 960 / w)
+                    if scale < 1.0:
+                        img = img.resize((int(w * scale), int(h * scale)), Image.BILINEAR)
+                    b, _, _ = cap.encode_jpeg(img, 60, 960)
+                    yield (b"--" + boundary + b"\r\nContent-Type: image/jpeg\r\n\r\n" + b + b"\r\n")
             except Exception:
                 pass
-            await asyncio.sleep(0.33)  # ~3fps
+            await asyncio.sleep(0.4)
 
     return StreamingResponse(gen(), media_type="multipart/x-mixed-replace; boundary=frame")
 

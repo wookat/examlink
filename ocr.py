@@ -23,11 +23,35 @@ def _get_engine():
         if _engine is None and not _broken:
             try:
                 from rapidocr_onnxruntime import RapidOCR
-                _engine = RapidOCR()
+                _engine = _make_engine()
             except Exception:
                 _broken = True
                 return None
         return _engine
+
+
+def _make_engine():
+    """Build RapidOCR with onnxruntime capped at 2 intra-op threads.
+
+    OrtInferSession leaves intra_op_num_threads unset → onnxruntime grabs
+    EVERY physical core, so each ~2s OCR pass freezes the exam machine.
+    Patching the SessionOptions factory before engine init caps all three
+    sessions (det/rec/cls) without touching site-packages."""
+    try:
+        import rapidocr_onnxruntime.utils as ru
+        real_so = ru.SessionOptions
+
+        def _limited():
+            o = real_so()
+            o.intra_op_num_threads = 2
+            o.inter_op_num_threads = 1
+            return o
+
+        ru.SessionOptions = _limited
+    except Exception:
+        pass
+    from rapidocr_onnxruntime import RapidOCR
+    return RapidOCR()
 
 
 # "第13题", "13.", "13、", "13/60", "13 :" — take the first plausible number

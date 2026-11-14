@@ -64,28 +64,41 @@ def effective_index(monitor_index):
 
 def grab_monitor(monitor_index=1):
     """Grab one monitor as a PIL Image (BGRA -> RGB)."""
-    mons = _sct.monitors
-    idx = monitor_index if 1 <= monitor_index < len(mons) else 1
-    mon = mons[idx]
-    shot = _sct.grab(mon)
+    shot, mon = grab_monitor_shot(monitor_index)
     img = Image.frombytes("RGB", shot.size, shot.bgra, "raw", "BGRX")
     return img, mon
 
 
-def grab_region(monitor_index, rect):
-    """Grab a sub-rect (left, top, w, h in physical px) of a monitor."""
+def grab_monitor_shot(monitor_index=1):
+    """Grab one monitor -> raw mss ScreenShot (keeps .bgra for zero-copy sampling)."""
     mons = _sct.monitors
     idx = monitor_index if 1 <= monitor_index < len(mons) else 1
     mon = mons[idx]
-    box = {
+    return _sct.grab(mon), mon
+
+
+def _region_box(monitor_index, rect):
+    mons = _sct.monitors
+    idx = monitor_index if 1 <= monitor_index < len(mons) else 1
+    mon = mons[idx]
+    return {
         "left": int(mon["left"] + rect[0]),
         "top": int(mon["top"] + rect[1]),
         "width": max(1, int(rect[2])),
         "height": max(1, int(rect[3])),
     }
-    shot = _sct.grab(box)
+
+
+def grab_region(monitor_index, rect):
+    """Grab a sub-rect (left, top, w, h in physical px) of a monitor."""
+    shot = _sct.grab(_region_box(monitor_index, rect))
     img = Image.frombytes("RGB", shot.size, shot.bgra, "raw", "BGRX")
     return img
+
+
+def grab_region_shot(monitor_index, rect):
+    """Grab a sub-rect -> raw mss ScreenShot (zero-copy diff path)."""
+    return _sct.grab(_region_box(monitor_index, rect))
 
 
 def norm_to_pixels(roi_norm, mon):
@@ -115,6 +128,30 @@ def sig_of(img, size=_SIG):
     sub = arr[np.ix_(ys, xs)].astype(np.uint32)
     lum = (sub[:, :, 0] * 77 + sub[:, :, 1] * 150 + sub[:, :, 2] * 29) >> 8
     return lum.astype(np.int16)
+
+
+def sig_of_shot(shot, size=_SIG):
+    """64x64 luma signature sampled strided off the raw mss BGRA buffer.
+
+    np.frombuffer is zero-copy — only the 64x64 subset (16KB) is ever
+    materialized, vs ~25MB for the whole-frame ndarray path. BGRA layout:
+    [0]=B [1]=G [2]=R, so the same ITU-601 weights land on 29/150/77.
+    """
+    w, h = shot.size
+    a = np.frombuffer(shot.bgra, dtype=np.uint8).reshape(h, w, 4)
+    ys = np.linspace(0, h - 1, size).astype(np.intp)
+    xs = np.linspace(0, w - 1, size).astype(np.intp)
+    sub = a[np.ix_(ys, xs)]
+    lum = (sub[:, :, 2].astype(np.uint32) * 77
+           + sub[:, :, 1].astype(np.uint32) * 150
+           + sub[:, :, 0].astype(np.uint32) * 29) >> 8
+    return lum.astype(np.int16)
+
+
+def sig_any(x, size=_SIG):
+    """Signature for either an mss ScreenShot or a PIL Image — identical
+    luma output on both paths so baselines stay comparable."""
+    return sig_of_shot(x, size) if hasattr(x, "bgra") else sig_of(x, size)
 
 
 def diff_ratio(a, b):
@@ -168,6 +205,8 @@ class DiffWatcher:
         self._still_since = time.time()
         self._last_trigger = 0.0
         self._thread = None
+        self.last_shot = None       # latest raw frame — shared with /preview.mjpg
+        self.last_shot_ts = 0.0
 
     def start(self):
         if self._thread is None:
@@ -197,10 +236,13 @@ class DiffWatcher:
             poll = max(0.25, auto.get("poll_ms", 900) / 1000.0)
             if not enabled:
                 self._prev = self._baseline = None
+                self.last_shot = None
                 time.sleep(1.0)
                 continue
             try:
                 img = self.grab_fn()
+                self.last_shot = img
+                self.last_shot_ts = time.time()
                 cur = self.thumb_fn(img)
                 now = time.time()
                 if self._prev is None:
@@ -238,7 +280,14 @@ class DiffWatcher:
                     self.on_trigger()
             except Exception:
                 pass
-            time.sleep(poll)
+            # Adaptive poll: after ~3s of stillness the screen is idle —
+            # drop to a third of the rate (≤1.2s) and save most of the
+            # BitBlt cost. Baseline diffs ACCUMULATE, so a slower cadence
+            # cannot miss a question flip; it only delays it ~1s worst case.
+            if time.time() - self._still_since > 3 and time.time() - self._last_trigger > 3:
+                time.sleep(min(1.2, poll * 3))
+            else:
+                time.sleep(poll)
 
     def _busy(self):
         fn = getattr(self, "busy_fn", None)
