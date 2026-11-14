@@ -646,11 +646,14 @@ input[type=range]::-moz-range-thumb {
 }
 @keyframes fadeIn { from { opacity: 0; } }
 #lightboxImg { flex: 1; object-fit: contain; min-height: 0; }
-.lightbox-bar { padding: 14px; display: flex; justify-content: center; }
-.lightbox-bar button {
-  padding: 11px 30px; border-radius: var(--radius); border: none;
-  background: var(--accent); color: #fff; font-size: 15px; font-weight: 600; cursor: pointer;
+.lb-close {
+  position: absolute; top: calc(12px + env(safe-area-inset-top, 0px)); right: 14px;
+  width: 40px; height: 40px; border-radius: 50%; border: 1px solid rgba(255,255,255,.25);
+  background: rgba(0,0,0,.6); color: #fff; cursor: pointer;
+  display: grid; place-items: center;
 }
+.lb-close .ico { width: 20px; height: 20px; }
+.lb-close:hover { background: rgba(255,255,255,.15); }
 
 #toast {
   position: fixed; left: 50%; bottom: 96px; transform: translateX(-50%) translateY(20px);

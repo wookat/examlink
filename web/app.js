@@ -215,7 +215,10 @@ $("#dotFab").onclick = () => {
   $("#dotFab").setAttribute("aria-label", open ? "收起答案" : "展开答案");
 };
 document.addEventListener("keydown", e => {
-  if (e.key === "Escape" && document.body.classList.contains("dot-open"))
+  if (e.key !== "Escape") return;
+  if (!$("#lightbox").classList.contains("hidden"))
+    $("#lightbox").classList.add("hidden");
+  else if (document.body.classList.contains("dot-open"))
     $("#dotFab").click();
 });
 // dot-mode action row mirrors the composer's buttons
@@ -529,7 +532,7 @@ function openLightbox(src) {
   $("#lightbox").classList.remove("hidden");
 }
 $("#lightboxClose").onclick = () => $("#lightbox").classList.add("hidden");
-$("#lightbox").onclick = (e) => { if (e.target.id === "lightbox") $("#lightbox").classList.add("hidden"); };
+$("#lightbox").onclick = () => $("#lightbox").classList.add("hidden");
 
 // ---------------- websocket ----------------
 function connect() {
