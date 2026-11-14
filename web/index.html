@@ -28,6 +28,9 @@
         <span id="fontPct">100%</span>
         <button id="fontPlus" class="fc-btn" aria-label="增大字号">A+</button>
       </div>
+      <button id="liveBtn" class="icon-btn" title="实时画面" aria-label="实时画面">
+        <svg class="ico" viewBox="0 0 24 24"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7-10-7-10-7z"/><circle cx="12" cy="12" r="3"/></svg>
+      </button>
       <button id="btnFullscreen" class="icon-btn" title="全屏" aria-label="全屏">
         <svg class="ico ico-expand" viewBox="0 0 24 24"><path d="M8 3H5a2 2 0 0 0-2 2v3"/><path d="M16 3h3a2 2 0 0 1 2 2v3"/><path d="M8 21H5a2 2 0 0 1-2-2v-3"/><path d="M16 21h3a2 2 0 0 0 2-2v-3"/></svg>
         <svg class="ico ico-compress hidden" viewBox="0 0 24 24"><path d="M8 3v3a2 2 0 0 1-2 2H3"/><path d="M16 3v3a2 2 0 0 0 2 2h3"/><path d="M8 21v-3a2 2 0 0 0-2-2H3"/><path d="M16 21v-3a2 2 0 0 1 2-2h3"/></svg>
@@ -90,6 +93,13 @@
       <span>停止</span>
     </button>
   </div>
+
+  <div id="livePanel" class="live-panel hidden">
+    <img id="liveImg" alt="考试屏实时画面">
+    <button id="liveClose" class="live-close" aria-label="关闭实时画面">✕</button>
+  </div>
+
+  <div id="flashFx" class="flash-fx" aria-hidden="true"></div>
 </main>
 
 <!-- ============ 设置页 ============ -->
@@ -180,6 +190,9 @@
         <div id="modelList" class="model-list hidden"></div>
         <label class="field">双模型校验 <span class="field-sub">（同一题再答一遍比对，不一致会标红）</span>
           <select id="verifySel"></select>
+        </label>
+        <label class="field">兜底模型 <span class="field-sub">（主模型失败时自动切换重答）</span>
+          <select id="fallbackSel"></select>
         </label>
         <p class="hint">档案的 Key 存在服务端 config.json；直连模式的 Key 只保存在本机浏览器。</p>
       </div>
@@ -283,6 +296,14 @@
       <label class="switch-row">
         <span class="switch-text">保持屏幕常亮（需 HTTPS 或 localhost）</span>
         <input type="checkbox" id="wakeSw"><span class="slider"></span>
+      </label>
+      <label class="switch-row">
+        <span class="switch-text">解析默认折叠（点大字答案展开）</span>
+        <input type="checkbox" id="foldSw"><span class="slider"></span>
+      </label>
+      <label class="switch-row">
+        <span class="switch-text">历史题折叠为答案索引（当前题完整显示）</span>
+        <input type="checkbox" id="indexSw"><span class="slider"></span>
       </label>
       <p class="hint">侧视=内容贴到离你最近的屏幕边缘；远视=超大字+只看最新答案；极简点=整页缩成一个圆点，点开才显示答案。</p>
     </section>

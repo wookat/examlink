@@ -26,11 +26,11 @@
   --warn: #ffc861;
   --violet: #a78bfa;
 
-  /* shape & depth */
-  --radius-xs: 7px;
-  --radius-s: 10px;
-  --radius: 13px;
-  --radius-l: 20px;
+  /* shape & depth — sharp flat language, minimal rounding */
+  --radius-xs: 2px;
+  --radius-s: 3px;
+  --radius: 4px;
+  --radius-l: 6px;
   --ring: 0 0 0 3px var(--accent-ring);
 
   /* type */
@@ -93,7 +93,7 @@ img { max-width: 100%; }
 .brand { display: flex; align-items: center; gap: 9px; font-weight: 700; font-size: 16px; letter-spacing: .3px; }
 .logo-mark {
   display: grid; place-items: center; width: 23px; height: 23px;
-  border-radius: 7px; font-size: 13px; line-height: 1; color: #fff;
+  border-radius: 3px; font-size: 13px; line-height: 1; color: #fff;
   background: var(--accent);
 }
 .brand-text { padding-top: 1px; }
@@ -104,7 +104,7 @@ img { max-width: 100%; }
 .conn-dot.err { background: var(--danger); }
 
 .pill {
-  font-size: 12px; font-weight: 600; padding: 5px 11px; border-radius: 999px;
+  font-size: 12px; font-weight: 600; padding: 5px 11px; border-radius: 3px;
   border: 1px solid var(--border); color: var(--muted);
   transition: color .2s, border-color .2s;
   white-space: nowrap; display: inline-flex; align-items: center; gap: 6px;
@@ -253,8 +253,19 @@ body.latest-only .feed > .ans:not(:last-child) { display: none; }
 .detail-toggle:hover { color: var(--text); }
 .ans.has-hero:not(.detail-open) .md { display: none; }
 .ans.has-hero.detail-open .ans-hero { font-size: calc(var(--fs) * 1.15); color: var(--ok); }
+.ans-hero { cursor: pointer; }
+
+/* index mode: past groups collapse to one-line answer index */
+body.idx-mode .ans:not(.cur-q):not(.force-open) { padding: 8px 12px; cursor: pointer; }
+body.idx-mode .ans:not(.cur-q):not(.force-open) .ans-sub,
+body.idx-mode .ans:not(.cur-q):not(.force-open) .ans-hero,
+body.idx-mode .ans:not(.cur-q):not(.force-open) .detail-toggle,
+body.idx-mode .ans:not(.cur-q):not(.force-open) .md,
+body.idx-mode .ans:not(.cur-q):not(.force-open) .shot-thumb { display: none; }
+body.idx-mode .ans:not(.cur-q):not(.force-open) .ans-head { margin-bottom: 0; }
+body.idx-mode .ans.cur-q { border-color: var(--accent); }
 .copy-btn {
-  flex: 0 0 auto; width: 26px; height: 26px; border-radius: 7px;
+  flex: 0 0 auto; width: 26px; height: 26px; border-radius: 3px;
   display: grid; place-items: center; border: none; cursor: pointer;
   background: transparent; color: var(--faint); transition: color .15s, background .15s;
 }
@@ -410,6 +421,29 @@ body.dot-mode.dot-open .nav-ctl { bottom: 90px; right: 76px; }
 }
 body.dot-mode.dot-open .dot-actions { display: flex; }
 .dot-actions .qbtn { padding: 0 20px; height: 44px; }
+
+/* answer-done screen flash — edge glow signals "写完了" */
+.flash-fx {
+  position: fixed; inset: 0; pointer-events: none; z-index: 90; opacity: 0;
+  box-shadow: inset 0 0 0 3px var(--ok), inset 0 0 90px rgba(63, 209, 140, .35);
+}
+.flash-fx.go { animation: doneFlash .7s ease-out; }
+@keyframes doneFlash { 0% { opacity: 1; } 100% { opacity: 0; } }
+
+/* live preview PIP panel on the answer view */
+.live-panel {
+  position: fixed; left: 14px; bottom: calc(14px + env(safe-area-inset-bottom, 0px));
+  z-index: 56; width: min(320px, 46vw); aspect-ratio: 16/9;
+  border: 1px solid var(--border-strong); background: #000;
+}
+.live-panel img { width: 100%; height: 100%; object-fit: contain; display: block; }
+.live-close {
+  position: absolute; top: 4px; right: 4px; width: 24px; height: 24px;
+  border: none; border-radius: 3px; background: rgba(0,0,0,.65); color: #fff;
+  font-size: 12px; cursor: pointer; line-height: 1;
+}
+body.dot-mode .live-panel { display: none; }
+@media (max-width: 480px) { .live-panel { width: 46vw; } }
 @media (max-width: 480px) {
   body.dot-mode.dot-open #answers { width: 100%; border-left: none; }
   body.dot-mode.dot-open #view-live .topbar { width: 100%; }
@@ -568,7 +602,7 @@ input[type=range]::-moz-range-thumb {
 
 .kb-file {
   font-size: 12px; color: var(--muted); background: rgba(10,12,17,.6);
-  border: 1px solid var(--border); border-radius: 9px; padding: 8px 12px; margin-bottom: 2px;
+  border: 1px solid var(--border); border-radius: 3px; padding: 8px 12px; margin-bottom: 2px;
 }
 .hint code {
   font-family: var(--mono); font-size: 11px; background: rgba(255,255,255,.07);
@@ -576,7 +610,7 @@ input[type=range]::-moz-range-thumb {
 }
 .badge-tag {
   font-size: 11px; font-weight: 600; color: var(--warn); background: rgba(255,200,97,.12);
-  padding: 4px 9px; border-radius: 999px; align-self: center;
+  padding: 4px 9px; border-radius: 3px; align-self: center;
 }
 .hint { font-size: 12px; color: var(--faint); margin-top: 11px; line-height: 1.55; }
 .card.danger { border-color: rgba(255,107,107,.2); }
@@ -621,7 +655,7 @@ input[type=range]::-moz-range-thumb {
 #toast {
   position: fixed; left: 50%; bottom: 96px; transform: translateX(-50%) translateY(20px);
   background: var(--bg-elev); border: 1px solid var(--border-strong); color: var(--text);
-  padding: 12px 22px; border-radius: 999px; font-size: 14px; font-weight: 600;
+  padding: 12px 22px; border-radius: 4px; font-size: 14px; font-weight: 600;
   opacity: 0; pointer-events: none; transition: .25s ease; z-index: 99;
   max-width: 86vw; text-align: center;
 }

@@ -115,7 +115,7 @@ syncFsIcon();
 
 // ---------------- display prefs (gaze / align / contrast / latest) ----------------
 const DISP_KEY = "examlink.disp";
-let DISP = { align: "center", cw: 80, contrast: "std", latestOnly: false, gaze: "", dot: false, wake: true };
+let DISP = { align: "center", cw: 80, contrast: "std", latestOnly: false, gaze: "", dot: false, wake: true, fold: true, index: false };
 try { Object.assign(DISP, JSON.parse(localStorage.getItem(DISP_KEY) || "{}")); } catch {}
 
 const GAZE_PRESETS = {
@@ -130,6 +130,8 @@ function applyDisp() {
   document.body.dataset.align = DISP.align;
   document.body.dataset.contrast = DISP.contrast;
   document.body.classList.toggle("latest-only", !!DISP.latestOnly);
+  document.body.classList.toggle("idx-mode", !!DISP.index);
+  if (DISP.index) markCurGroup();
   document.body.classList.toggle("dot-mode", !!DISP.dot);
   if (!DISP.dot) document.body.classList.remove("dot-open");
   const narrow = window.matchMedia("(max-width: 640px)").matches;
@@ -144,6 +146,8 @@ function applyDisp() {
   if ($("#latestSw")) $("#latestSw").checked = !!DISP.latestOnly;
   if ($("#dotSw")) $("#dotSw").checked = !!DISP.dot;
   if ($("#wakeSw")) $("#wakeSw").checked = !!DISP.wake;
+  if ($("#foldSw")) $("#foldSw").checked = !!DISP.fold;
+  if ($("#indexSw")) $("#indexSw").checked = !!DISP.index;
   syncDotFab();
   keepAwake();
 }
@@ -174,6 +178,26 @@ $("#dotSw")?.addEventListener("change", e => {
 });
 $("#wakeSw")?.addEventListener("change", e => {
   DISP.wake = e.target.checked; applyDisp(); saveDisp();
+});
+$("#foldSw")?.addEventListener("change", e => {
+  DISP.fold = e.target.checked; applyDisp(); saveDisp();
+});
+$("#indexSw")?.addEventListener("change", e => {
+  DISP.index = e.target.checked; applyDisp(); saveDisp();
+});
+
+/* index mode: only the current (latest) question group shows full cards;
+   earlier groups collapse to one-line answer index rows, click to expand */
+function markCurGroup() {
+  const cards = [...document.querySelectorAll("#answers .ans")];
+  const cur = cards.length ? cards[cards.length - 1].dataset.qnum : null;
+  cards.forEach(c => c.classList.toggle("cur-q", !!cur && c.dataset.qnum === cur));
+}
+document.addEventListener("click", e => {
+  if (!DISP.index) return;
+  const card = e.target.closest("#answers .ans:not(.cur-q)");
+  if (card && !e.target.closest(".copy-btn, .shot-thumb, a, .detail-toggle"))
+    card.classList.toggle("force-open");
 });
 
 // ---------------- minimal dot mode (QuiteWin-style) ----------------
@@ -376,6 +400,7 @@ function addCard({ id, image, trigger, tag, qnum }) {
     div.querySelector(".ans-head").appendChild(img);
   }
   feed.appendChild(div);
+  markCurGroup();
   if (DISP.dot && !replaying && !document.body.classList.contains("dot-open")) {
     dotUnseen++; syncDotFab();
     $("#dotFab").classList.add("pulse");
@@ -431,13 +456,18 @@ function setAnsChipFromText(el, text) {
     hero = document.createElement("div"); hero.className = "ans-hero";
     const tog = document.createElement("button");
     tog.className = "detail-toggle"; tog.textContent = "解析 ▾";
-    tog.onclick = () => {
+    const flip = () => {
       const open = el.classList.toggle("detail-open");
       tog.textContent = open ? "收起解析 ▴" : "解析 ▾";
     };
+    tog.onclick = flip;
+    hero.onclick = flip;   // tapping the big answer also unfolds reasoning
+    const sub = el.querySelector(".ans-sub");
+    if (sub) sub.onclick = flip;
     el.insertBefore(hero, el.querySelector(".md"));
     el.insertBefore(tog, el.querySelector(".md"));
     el.classList.add("has-hero");
+    if (!DISP.fold) flip();   // user pref: reasoning expanded by default
   }
   hero.textContent = ans;
 }
@@ -480,6 +510,20 @@ function errCard(id, msg) {
   c.el.querySelector(".ans-status").textContent = "";
 }
 
+// ---------------- done flash + auto pill + live preview panel ----------------
+function flashDone() {
+  const f = $("#flashFx");
+  f.classList.remove("go"); void f.offsetWidth; f.classList.add("go");
+}
+$("#autoPill").onclick = () =>
+  send({ t: "set", patch: { auto: { enabled: !(state?.auto?.enabled) } } });
+$("#liveBtn").onclick = () => {
+  const p = $("#livePanel"), img = $("#liveImg");
+  const open = p.classList.toggle("hidden");
+  img.src = open ? "" : `/preview.mjpg?token=${encodeURIComponent(TOKEN_FINAL)}`;
+};
+$("#liveClose")?.addEventListener("click", () => $("#liveBtn").click());
+
 function openLightbox(src) {
   $("#lightboxImg").src = src;
   $("#lightbox").classList.remove("hidden");
@@ -521,7 +565,7 @@ function handle(m) {
       $("#btnAbort")?.classList.remove("hidden");
       break;
     }
-    case "done": finishCard(m.id); $("#busyDot")?.classList.add("hidden"); $("#btnAbort")?.classList.add("hidden"); break;
+    case "done": finishCard(m.id); flashDone(); $("#busyDot")?.classList.add("hidden"); $("#btnAbort")?.classList.add("hidden"); break;
     case "error": toast(m.msg || "错误", 3500); if (m.id) errCard(m.id, m.msg); $("#busyDot")?.classList.add("hidden"); $("#btnAbort")?.classList.add("hidden"); break;
     case "status": if (m.stage === "idle") { $("#busyDot")?.classList.add("hidden"); $("#btnAbort")?.classList.add("hidden"); } break;
     case "ask_ack": {
@@ -693,6 +737,8 @@ function onState(s) {
   const a = s.auto || {};
   pill.textContent = a.enabled ? "自动开" : "自动关";
   pill.className = "pill " + (a.enabled ? (s.busy ? "pill-busy" : "pill-on") : "pill-off");
+  pill.title = "点击切换自动触发";
+  pill.style.cursor = "pointer";
   // settings fields
   syncAutoUI(a);
   $("#autoEnabled").checked = !!a.enabled;
@@ -759,10 +805,10 @@ function syncHotkeyUI(s) {
 function syncAutoUI(a) {
   $("#autoThreshold").value = a.threshold ?? 5;
   $("#autoStable").value = (a.stable_ms ?? 1500) / 1000;
-  $("#autoCooldown").value = a.cooldown_s ?? 8;
+  $("#autoCooldown").value = a.cooldown_s ?? 3;
   $("#vThreshold").textContent = (a.threshold ?? 5).toFixed(1);
   $("#vStable").textContent = ((a.stable_ms ?? 1500) / 1000).toFixed(1) + "s";
-  $("#vCooldown").textContent = (a.cooldown_s ?? 8) + "s";
+  $("#vCooldown").textContent = (a.cooldown_s ?? 3) + "s";
 }
 
 function syncMonitorUI(s) {
@@ -820,18 +866,20 @@ function syncProxyUI(s) {
     }
   }
   ps.value = s.active_profile || "";
-  const vs = $("#verifySel");
-  if (vs && vs.options.length !== Object.keys(profs).length + 1) {
-    vs.innerHTML = "";
-    const v0 = document.createElement("option"); v0.value = ""; v0.textContent = "关闭";
-    vs.appendChild(v0);
-    for (const [n, p] of Object.entries(profs)) {
-      const o = document.createElement("option"); o.value = n;
-      o.textContent = `${p.label} (${p.model})`;
-      vs.appendChild(o);
+  for (const [sel, cur] of [[$("#verifySel"), s.verify_profile], [$("#fallbackSel"), s.fallback_profile]]) {
+    if (!sel) continue;
+    if (sel.options.length !== Object.keys(profs).length + 1) {
+      sel.innerHTML = "";
+      const v0 = document.createElement("option"); v0.value = ""; v0.textContent = "关闭";
+      sel.appendChild(v0);
+      for (const [n, p] of Object.entries(profs)) {
+        const o = document.createElement("option"); o.value = n;
+        o.textContent = `${p.label} (${p.model})`;
+        sel.appendChild(o);
+      }
     }
+    sel.value = cur || "";
   }
-  if (vs) vs.value = s.verify_profile || "";
 }
 
 function syncPromptUI(s) {
@@ -990,6 +1038,10 @@ $("#kbAutoSw")?.addEventListener("change", e => {
 $("#verifySel")?.addEventListener("change", e => {
   send({ t: "set", patch: { verify_profile: e.target.value } });
   toast(e.target.value ? "双模型校验已开启" : "双模型校验已关闭");
+});
+$("#fallbackSel")?.addEventListener("change", e => {
+  send({ t: "set", patch: { fallback_profile: e.target.value } });
+  toast(e.target.value ? "兜底模型已设置" : "兜底模型已关闭");
 });
 
 $("#btnSaveCfg").onclick = saveCfg;

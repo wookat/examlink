@@ -267,6 +267,7 @@ def public_state():
         "max_image_dim": CFG.get("max_image_dim", 3000),
         "kb_auto_append": bool(CFG.get("kb_auto_append")),
         "verify_profile": CFG.get("verify_profile", ""),
+        "fallback_profile": CFG.get("fallback_profile", ""),
     }
 
 
@@ -368,26 +369,46 @@ async def run_ai(cid, image_b64s, question, new_conv=False):
             break
     STATE["busy"] = True
     await status("thinking", prov["name"] + "/" + prov["model"])
+    # provider chain: primary first, then fallback profile if configured
+    provs = [prov]
+    fb = profile_prov(CFG.get("fallback_profile")) if CFG.get("fallback_profile") else None
+    if fb and fb["api_key"] and fb["base_url"] and fb["model"]:
+        provs.append(fb)
     full = []
     sent_done = False
+    last_err = None
     try:
-        async for piece in aimod.stream_chat(HISTORY, prov):
-            full.append(piece)
-            await broadcast({"t": "chunk", "id": cid, "text": piece})
-        text = "".join(full) or "（模型没有返回内容）"
-        HISTORY.append({"role": "assistant", "content": text})
-        sent_done = True
-        await broadcast({"t": "done", "id": cid})
+        for i, pv in enumerate(provs):
+            if i:
+                note = f"\n\n> ⚠ 主模型失败，已切换备选：{pv['name']}/{pv['model']}\n\n"
+                full.append(note)
+                await broadcast({"t": "chunk", "id": cid, "text": note})
+                await status("thinking", pv["name"] + "/" + pv["model"])
+            try:
+                async for piece in aimod.stream_chat(HISTORY, pv):
+                    full.append(piece)
+                    await broadcast({"t": "chunk", "id": cid, "text": piece})
+                sent_done = True
+                break
+            except asyncio.CancelledError:
+                raise
+            except Exception as e:
+                last_err = e
+        if sent_done:
+            text = "".join(full) or "（模型没有返回内容）"
+            HISTORY.append({"role": "assistant", "content": text})
+            await broadcast({"t": "done", "id": cid})
+        else:
+            e = last_err or Exception("unknown")
+            STATE["last_error"] = str(e)
+            log_card_update(cid, answer="".join(full), error=str(e))
+            await broadcast({"t": "error", "msg": f"AI 请求失败: {e}", "id": cid})
+            # roll back the unanswered user message
+            if HISTORY and HISTORY[-1].get("role") == "user":
+                HISTORY.pop()
     except asyncio.CancelledError:
         log_card_update(cid, answer="".join(full), stopped=True)
         raise
-    except Exception as e:
-        STATE["last_error"] = str(e)
-        log_card_update(cid, answer="".join(full), error=str(e))
-        await broadcast({"t": "error", "msg": f"AI 请求失败: {e}", "id": cid})
-        # roll back the unanswered user message
-        if HISTORY and HISTORY[-1].get("role") == "user":
-            HISTORY.pop()
     finally:
         if sent_done:
             text_done = "".join(full)
@@ -683,7 +704,7 @@ def apply_patch(patch):
             CFG["hotkey"] = v
             if HOTKEY:
                 HOTKEY.configure(hk_items())
-        elif k in ("monitor", "roi", "scene", "ai_mode", "port", "jpeg_quality", "max_image_dim", "custom_prompt", "knowledge", "kb_auto_append", "verify_profile"):
+        elif k in ("monitor", "roi", "scene", "ai_mode", "port", "jpeg_quality", "max_image_dim", "custom_prompt", "knowledge", "kb_auto_append", "verify_profile", "fallback_profile"):
             CFG[k] = v
     save_config(CFG)
     # restart watcher if poll params changed is unnecessary (read each loop)

@@ -184,7 +184,7 @@ class DiffWatcher:
                     self._last_change = now
                     self._dirty_since = self._dirty_since or now
                 stable_ms = float(auto.get("stable_ms", 1500)) / 1000.0
-                cooldown = float(auto.get("cooldown_s", 8))
+                cooldown = float(auto.get("cooldown_s", 3))
                 stable_for = now - self._last_change
                 cooled = now - self._last_trigger >= cooldown
                 if (self._dirty_since is not None

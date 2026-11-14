@@ -9,7 +9,7 @@
     "enabled": false,
     "poll_ms": 900,
     "stable_ms": 1500,
-    "cooldown_s": 8,
+    "cooldown_s": 3,
     "threshold": 5.0,
     "thumb_w": 96,
     "thumb_h": 54
@@ -31,5 +31,6 @@
   },
   "kb_auto_append": false,
   "verify_profile": "",
-  "knowledge": ""
+  "knowledge": "",
+  "fallback_profile": ""
 }
