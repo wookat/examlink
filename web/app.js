@@ -322,13 +322,22 @@ document.addEventListener("mousemove", e => {
    earlier groups collapse to one-line answer index rows, click to expand */
 function markCurGroup() {
   const cards = [...document.querySelectorAll("#answers .ans")];
-  const cur = cards.length ? cards[cards.length - 1].dataset.qnum : null;
-  cards.forEach(c => c.classList.toggle("cur-q", !!cur && c.dataset.qnum === cur));
-  /* the anchor card of the current group becomes the raised hero card
-     that overlaps its collapsed neighbours (deck look) */
-  const anchors = groupAnchors();
-  const heroAnchor = anchors[anchors.length - 1];
+  /* current group = trailing contiguous run sharing the last card's qnum */
+  const lastQ = cards.length ? cards[cards.length - 1].dataset.qnum : null;
+  let runStart = cards.length;
+  if (lastQ) {
+    runStart = cards.length - 1;
+    while (runStart > 0 && cards[runStart - 1].dataset.qnum === lastQ) runStart--;
+  }
+  cards.forEach((c, i) => c.classList.toggle("cur-q", i >= runStart));
+  /* the run's first card becomes the raised hero that overlaps the pile */
+  const heroAnchor = cards[runStart];
   cards.forEach(c => c.classList.toggle("q-hero", c === heroAnchor));
+  /* folded-deck depth: --d = distance up the pile from the hero card */
+  cards.forEach((c, i) => {
+    const d = Math.max(0, runStart - i);
+    c.style.setProperty("--d", Math.min(d, 8));
+  });
 }
 document.addEventListener("click", e => {
   if (!DISP.index) return;
@@ -484,12 +493,15 @@ function navCard(dir) {
   idx = Math.min(cards.length - 1, Math.max(0, idx + dir));
   cards[idx].scrollIntoView({ behavior: "smooth", block: "start" });
 }
-/* first card of each question group (same-qnum cards collapse into one stop) */
+/* first card of each question group — contiguous runs of the same qnum,
+   immune to qnum collisions across service restarts */
 function groupAnchors() {
-  const seen = new Set(), anchors = [];
+  const anchors = [];
+  let prev;
   document.querySelectorAll("#answers .ans").forEach(c => {
     const q = c.dataset.qnum;
-    if (!q || !seen.has(q)) { if (q) seen.add(q); anchors.push(c); }
+    if (q !== prev) anchors.push(c);
+    prev = q;
   });
   return anchors;
 }
@@ -567,18 +579,18 @@ function legacyCopy(t) {
   catch { toast("复制失败，请长按文本手动复制"); }
   ta.remove();
 }
-/* 第N题 chip: shown only on the first card of each question group */
+/* 第N题 chip: shown on the first card of each contiguous qnum run */
 function updateQChips() {
-  const seen = new Set();
+  let prev;
   document.querySelectorAll("#answers .ans").forEach(c => {
     const chip = c.querySelector(".qchip");
     if (!chip) return;
     const q = c.dataset.qnum;
-    if (q && !seen.has(q)) {
-      seen.add(q);
+    if (q && q !== prev) {
       chip.textContent = "第 " + (c.dataset.qno || q) + " 题";
       chip.classList.remove("hidden");
     } else chip.classList.add("hidden");
+    prev = q;
   });
 }
 /* extract "**答案：X**" from finished text -> header chip + glanceable hero with collapsible reasoning */

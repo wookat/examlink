@@ -88,6 +88,9 @@ def _hist_load():
             for e in json.loads(HIST_PATH.read_text(encoding="utf-8"))[-60:]:
                 if isinstance(e, dict) and e.get("id"):
                     CARD_LOG.append(e)
+            # resume question numbering past the highest persisted qnum so a
+            # restart never merges new captures into old groups
+            STATE["qnum"] = max((e.get("qnum") or 0 for e in CARD_LOG), default=0)
     except Exception:
         pass
 
