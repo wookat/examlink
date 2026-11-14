@@ -318,32 +318,78 @@ document.addEventListener("mousemove", e => {
   }
 });
 
-/* index mode: only the current (latest) question group shows full cards;
-   earlier groups collapse to one-line answer index rows, click to expand */
+/* index mode → bounded card deck (iOS lockscreen / Wallet stack):
+   the focused question's latest card is the front hero filling the frame;
+   at most DECK_LAYERS strips of older questions peek above it; everything
+   else is parked off-deck. Mouse wheel / ‹› steps flip between question
+   groups, so history never renders as a long overlapping pile. */
+const DECK_LAYERS = 4;
+let deckFocus = -1;   /* index into question groups; -1 = latest */
+function deckGroups() {
+  /* contiguous runs of the same source qnum — repeated numbers in the
+     test (…8,7,12) stay separate groups because runs are positional */
+  const gs = []; let prev = Symbol();
+  document.querySelectorAll("#answers .ans").forEach(c => {
+    const q = c.dataset.qnum || ("#" + gs.length);
+    if (q !== prev) { gs.push([]); prev = q; }
+    gs[gs.length - 1].push(c);
+  });
+  return gs;
+}
 function markCurGroup() {
   const cards = [...document.querySelectorAll("#answers .ans")];
-  /* current group = trailing contiguous run sharing the last card's qnum */
-  const lastQ = cards.length ? cards[cards.length - 1].dataset.qnum : null;
-  let runStart = cards.length;
-  if (lastQ) {
-    runStart = cards.length - 1;
-    while (runStart > 0 && cards[runStart - 1].dataset.qnum === lastQ) runStart--;
+  if (!DISP.index || !cards.length) {
+    cards.forEach(c => { c.classList.remove("q-hero", "cur-q", "deck-off"); c.style.removeProperty("--d"); });
+    return;
   }
-  cards.forEach((c, i) => c.classList.toggle("cur-q", i >= runStart));
-  /* the run's first card becomes the raised hero that overlaps the pile */
-  const heroAnchor = cards[runStart];
-  cards.forEach(c => c.classList.toggle("q-hero", c === heroAnchor));
-  /* folded-deck depth: --d = distance up the pile from the hero card */
-  cards.forEach((c, i) => {
-    const d = Math.max(0, runStart - i);
-    c.style.setProperty("--d", Math.min(d, 8));
+  const gs = deckGroups();
+  if (deckFocus < 0 || deckFocus >= gs.length) deckFocus = gs.length - 1;
+  gs.forEach((g, gi) => {
+    const depth = deckFocus - gi;              /* >0 behind, 0 focus, <0 newer */
+    g.forEach((c, ci) => {
+      const rep = ci === g.length - 1;          /* group's newest card represents it */
+      c.classList.toggle("cur-q", gi === deckFocus);
+      c.classList.toggle("q-hero", gi === deckFocus && rep);
+      const onDeck = rep && depth >= 0 && depth <= DECK_LAYERS;
+      c.classList.toggle("deck-off", !onDeck);
+      c.style.setProperty("--d", onDeck ? depth : 0);
+    });
   });
 }
+function deckStep(dir) {
+  const gs = deckGroups();
+  if (gs.length < 2) return;
+  deckFocus = Math.min(gs.length - 1, Math.max(0, (deckFocus < 0 ? gs.length - 1 : deckFocus) + dir));
+  markCurGroup();
+}
+/* wheel flips question groups; when the hero can still scroll its own
+   content in that direction the wheel scrolls the card first */
+let deckWheelT = 0;
+document.addEventListener("wheel", e => {
+  if (!DISP.index || view !== "live") return;
+  if (document.body.classList.contains("dot-open")) return;   /* panel = normal list */
+  if (e.target.closest(".composer, #lightbox, .modal, #view-settings")) return;
+  const hero = document.querySelector("#answers .ans.q-hero");
+  if (hero && hero.scrollHeight > hero.clientHeight + 4) {
+    const dir = e.deltaY > 0 ? 1 : -1;
+    const atEdge = dir > 0 ? hero.scrollTop + hero.clientHeight >= hero.scrollHeight - 4 : hero.scrollTop <= 4;
+    if (!atEdge) return;                        /* let the card content scroll */
+  }
+  const now = performance.now();
+  if (now - deckWheelT < 160 || Math.abs(e.deltaY) < 8) { e.preventDefault(); return; }
+  deckWheelT = now;
+  e.preventDefault();
+  deckStep(e.deltaY > 0 ? 1 : -1);
+}, { passive: false });
+/* click a peeking strip → that question comes to the front */
 document.addEventListener("click", e => {
   if (!DISP.index) return;
-  const card = e.target.closest("#answers .ans:not(.cur-q)");
-  if (card && !e.target.closest(".copy-btn, .shot-thumb, a, .detail-toggle"))
-    card.classList.toggle("force-open");
+  const card = e.target.closest("#answers .ans:not(.cur-q):not(.deck-off)");
+  if (card && !e.target.closest(".copy-btn, .shot-thumb, a, .detail-toggle")) {
+    const gs = deckGroups();
+    const gi = gs.findIndex(g => g.includes(card));
+    if (gi >= 0) { deckFocus = gi; markCurGroup(); }
+  }
 });
 
 // ---------------- minimal dot mode (QuiteWin-style) ----------------
@@ -484,6 +530,7 @@ window.addEventListener("contextmenu", (e) => { if (recording) e.preventDefault(
 
 // ---------------- card navigation (prev/next question, page scroll) ----------------
 function navCard(dir) {
+  if (DISP.index) { deckStep(dir); return; }
   const cards = groupAnchors();
   if (!cards.length) return;
   const feed = $("#answers");
@@ -506,6 +553,7 @@ function groupAnchors() {
   return anchors;
 }
 function scrollPage(dir) {
+  if (DISP.index) { deckStep(dir); return; }
   const feed = $("#answers");
   feed.scrollBy({ top: dir * feed.clientHeight * 0.8, behavior: "smooth" });
 }
@@ -534,7 +582,7 @@ function ensureFeed() {
     f.innerHTML = `<div class="empty-feed"><div><div class="big">◈</div>截图或自动触发后，答案会显示在这里</div></div>`;
   }
 }
-function scrollFeed() { const f = $("#answers"); f.scrollTop = f.scrollHeight; }
+function scrollFeed() { if (DISP.index) return; const f = $("#answers"); f.scrollTop = f.scrollHeight; }
 
 let replaying = false;
 function addCard({ id, image, trigger, tag, qnum }) {
@@ -553,6 +601,7 @@ function addCard({ id, image, trigger, tag, qnum }) {
     div.querySelector(".ans-head").appendChild(img);
   }
   feed.appendChild(div);
+  deckFocus = -1;                 /* new card → deck jumps to the latest */
   markCurGroup();
   if (DISP.dot && !replaying && !document.body.classList.contains("dot-open")) {
     dotUnseen++; syncDotFab();
