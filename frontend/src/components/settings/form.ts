@@ -12,6 +12,7 @@ export interface SettingsForm {
   knowledge: string;
   autoEnabled: boolean;
   threshold: number; stable: number; cooldown: number;
+  ocrQnum: boolean;
   quality: number; maxDim: number;
   profile: string;
   provider: string; pBase: string; pKey: string; pModel: string;
@@ -28,7 +29,8 @@ export const form: SettingsForm = reactive<SettingsForm>({
   customPrompt: "",
   knowledge: "",
   autoEnabled: false,
-  threshold: 5, stable: 1.5, cooldown: 3,
+  threshold: 1.5, stable: 1.5, cooldown: 3,
+  ocrQnum: true,
   quality: 92, maxDim: 3000,
   profile: "",
   provider: "custom", pBase: "", pKey: "", pModel: "",
@@ -51,9 +53,11 @@ export function initSettingsSync() {
     if (!s) return;
     const a = s.auto || {};
     form.autoEnabled = !!a.enabled;
-    if (a.threshold !== undefined) form.threshold = a.threshold;
+    if (a.change_ratio !== undefined) form.threshold = a.change_ratio * 100;
+    else if (a.threshold !== undefined && a.threshold < 1) form.threshold = a.threshold * 100;
     if (a.stable_ms !== undefined) form.stable = a.stable_ms / 1000;
     if (a.cooldown_s !== undefined) form.cooldown = a.cooldown_s;
+    if (a.ocr_qnum !== undefined) form.ocrQnum = !!a.ocr_qnum;
     form.monitor = s.monitor ?? null;
     form.scene = s.scene || "general";
     form.quality = s.jpeg_quality ?? 92;

@@ -27,6 +27,7 @@ from pathlib import Path
 import capture as cap
 import ai as aimod
 import hotkeys as hkmod
+import ocr as ocrom
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect, Request
 from fastapi.responses import FileResponse, JSONResponse, Response, StreamingResponse
 
@@ -326,8 +327,17 @@ async def do_capture(trigger="manual", ask=True, question=""):
     try:
         await status("capture", trigger)
         img = await asyncio.to_thread(grab_current)
+        if WATCHER:
+            WATCHER.note_captured(img)   # rebase the auto detector on every capture
         b64, w, h, datauri = cap.encode_jpeg_b64(img, CFG.get("jpeg_quality", 88), CFG.get("max_image_dim", 2000))
         STATE["qnum"] += 1
+        if CFG.get("auto", {}).get("ocr_qnum", True):
+            try:
+                real_q = await asyncio.to_thread(ocrom.question_number, img)
+                if real_q:
+                    STATE["qnum"] = real_q
+            except Exception:
+                pass
         cid = uuid.uuid4().hex[:10]
         thumb = cap.encode_jpeg_b64(img, 55, 240)[3]
         STATE["last_capture"] = {"id": cid, "b64": b64, "w": w, "h": h, "ts": time.time()}
@@ -426,14 +436,8 @@ async def run_ai(cid, image_b64s, question, new_conv=False):
 # ---------------- auto trigger ----------------
 
 def make_watcher():
-    auto_cfg = CFG.get("auto", {})
-    tw, th = int(auto_cfg.get("thumb_w", 96)), int(auto_cfg.get("thumb_h", 54))
-
-    def thumb_fn(img):
-        return cap.thumb_gray(img, tw, th)
-
     watcher = cap.DiffWatcher(on_trigger=on_auto_trigger, cfg_getter=lambda: CFG,
-                              grab_fn=grab_watch, thumb_fn=thumb_fn)
+                              grab_fn=grab_watch, thumb_fn=cap.sig_of)
 
     def busy():
         return STATE["busy"] or CURRENT_TASK is not None and not CURRENT_TASK.done()
@@ -726,6 +730,8 @@ def apply_patch(patch):
     for k, v in patch.items():
         if k == "auto" and isinstance(v, dict):
             CFG.setdefault("auto", {}).update(v)
+            if "change_ratio" in v:
+                CFG["auto"].pop("threshold", None)   # legacy MAE key superseded
         elif k == "proxy" and isinstance(v, dict):
             CFG.setdefault("proxy", {}).update(v)
         elif k == "scenes" and isinstance(v, dict):

@@ -10,9 +10,8 @@
     "poll_ms": 900,
     "stable_ms": 1500,
     "cooldown_s": 3,
-    "threshold": 5.0,
-    "thumb_w": 96,
-    "thumb_h": 54
+    "change_ratio": 0.015,
+    "ocr_qnum": true
   },
   "proxy": {
     "provider": "custom",

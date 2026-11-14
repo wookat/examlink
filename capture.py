@@ -100,14 +100,28 @@ def norm_to_pixels(roi_norm, mon):
     return (left - mon["left"], top - mon["top"], right - left, bottom - top)
 
 
-def thumb_gray(img, w=96, h=54):
-    """Small grayscale numpy array for cheap diffing."""
-    t = img.convert("L").resize((w, h), Image.BILINEAR)
-    return np.asarray(t, dtype=np.float32)
+_SIG = 64     # signature side length — sampled, not resized
+_NOISE = 12   # per-pixel luma floor: kills AA redraws and codec jitter
 
 
-def mae(a, b):
-    return float(np.mean(np.abs(a - b)))
+def sig_of(img, size=_SIG):
+    """64x64 luma signature sampled directly off the PIL image (strided,
+    no resize pass). ScreenQA showed buffer-level sampling is ~5x cheaper
+    than convert+resize; sampling a PIL array gets the same signature."""
+    arr = np.asarray(img.convert("RGB"), dtype=np.uint8)
+    h, w = arr.shape[:2]
+    ys = np.linspace(0, h - 1, size).astype(np.intp)
+    xs = np.linspace(0, w - 1, size).astype(np.intp)
+    sub = arr[np.ix_(ys, xs)].astype(np.uint32)
+    lum = (sub[:, :, 0] * 77 + sub[:, :, 1] * 150 + sub[:, :, 2] * 29) >> 8
+    return lum.astype(np.int16)
+
+
+def diff_ratio(a, b):
+    """Fraction of sampled pixels whose luma moved by more than _NOISE."""
+    if a is None or b is None:
+        return 1.0
+    return float(np.mean(np.abs(a.astype(np.int32) - b.astype(np.int32)) > _NOISE))
 
 
 def encode_jpeg(img, quality=88, max_dim=2000):
@@ -129,25 +143,30 @@ def encode_jpeg_b64(img, quality=88, max_dim=2000):
 
 
 class DiffWatcher:
-    """Polls a screen region and fires on_trigger() when content stabilizes
-    after a change. Runs in a daemon thread; state mutated via methods.
+    """Baseline-relative change detector (twin-comparison style, after video
+    shot-boundary detection + ScreenQA's fingerprint watcher).
 
-    - diff computed only inside ROI (or full screen when roi is None)
-    - 'stable': content unchanged for stable_ms after last detected change
-    - cooldown: minimum seconds between triggers
-    - busy_fn: callable returning True while an AI request is in flight
+    - baseline: signature of the last answered frame. Manual captures rebase
+      it via note_captured() so the same screen never double-fires.
+    - changed: diff_ratio(cur, baseline) > change_ratio. Because the
+      comparison is against the baseline, drift ACCUMULATES — slow fades /
+      smooth question scrolls always pass the threshold eventually.
+    - motion: diff_ratio(cur, prev) > motion_ratio — only used to tell when
+      the screen has gone quiet again.
+    - fires when changed && quiet for stable_ms && cooldown && !busy.
     """
 
     def __init__(self, on_trigger, cfg_getter, grab_fn, thumb_fn):
         self.on_trigger = on_trigger
         self.cfg_getter = cfg_getter      # () -> dict with auto settings + monitor + roi
         self.grab_fn = grab_fn            # () -> PIL.Image of watched area
-        self.thumb_fn = thumb_fn          # (img) -> np.ndarray
+        self.thumb_fn = thumb_fn          # (img) -> np.ndarray signature
         self._stop = False
-        self._dirty_since = None
-        self._last_change = 0.0
-        self._last_trigger = 0.0
         self._prev = None
+        self._baseline = None
+        self._noise_ema = None    # ambient frame-to-frame ratio tracker
+        self._still_since = time.time()
+        self._last_trigger = 0.0
         self._thread = None
 
     def start(self):
@@ -158,41 +177,64 @@ class DiffWatcher:
     def stop(self):
         self._stop = True
 
+    def note_captured(self, img):
+        """Any capture (manual / ask / hotkey / auto) rebases the detector so
+        the same screen never triggers a second pass."""
+        try:
+            sig = self.thumb_fn(img)
+            self._baseline = sig
+            self._prev = sig
+            self._still_since = time.time()
+            self._last_trigger = time.time()   # doubles as cooldown
+        except Exception:
+            pass
+
     def _loop(self):
         while not self._stop:
             cfg = self.cfg_getter()
             auto = cfg.get("auto", {})
             enabled = auto.get("enabled", False)
-            poll = max(0.3, auto.get("poll_ms", 900) / 1000.0)
+            poll = max(0.25, auto.get("poll_ms", 900) / 1000.0)
             if not enabled:
-                self._prev = None
-                self._dirty_since = None
+                self._prev = self._baseline = None
                 time.sleep(1.0)
                 continue
             try:
                 img = self.grab_fn()
                 cur = self.thumb_fn(img)
+                now = time.time()
                 if self._prev is None:
-                    self._prev = cur
+                    self._prev = self._baseline = cur
+                    self._still_since = now
                     time.sleep(poll)
                     continue
-                diff = mae(cur, self._prev)
+                th = float(auto.get("change_ratio", auto.get("threshold", 0.015)))
+                if th >= 1.0:
+                    th = 0.015    # legacy MAE-scale value → sane ratio default
+                changed = diff_ratio(cur, self._baseline) > th
+                d_prev = diff_ratio(cur, self._prev)
+                # adaptive stillness floor: ambient desktop noise (clock,
+                # wallpaper, animations) must not count as "still moving".
+                # EMA tracks noise only while the screen is NOT in a change.
+                motion_th = float(auto.get(
+                    "motion_ratio", max(0.004, (self._noise_ema or 0.0) * 2.5, th * 0.4)))
+                moving = d_prev > motion_th
+                if not changed:
+                    self._noise_ema = (d_prev if self._noise_ema is None
+                                       else self._noise_ema * 0.9 + d_prev * 0.1)
                 self._prev = cur
-                now = time.time()
-                threshold = float(auto.get("threshold", 5.0))
-                if diff > threshold:
-                    self._last_change = now
-                    self._dirty_since = self._dirty_since or now
+                if moving:
+                    self._still_since = now
                 stable_ms = float(auto.get("stable_ms", 1500)) / 1000.0
                 cooldown = float(auto.get("cooldown_s", 3))
-                stable_for = now - self._last_change
-                cooled = now - self._last_trigger >= cooldown
-                if (self._dirty_since is not None
-                        and stable_for >= stable_ms
-                        and cooled
+                if (changed
+                        and now - self._still_since >= stable_ms
+                        and now - self._last_trigger >= cooldown
                         and not self._busy()):
                     self._last_trigger = now
-                    self._dirty_since = None
+                    self._baseline = cur
+                    self._prev = cur
+                    self._still_since = now
                     self.on_trigger()
             except Exception:
                 pass
