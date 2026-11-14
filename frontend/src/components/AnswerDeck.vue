@@ -73,8 +73,6 @@ function measureHero() {
   if (!feed) return;
   if (hero) {
     feed.style.setProperty("--hb", (hero.offsetTop + hero.offsetHeight) + "px");
-    const tab = document.querySelector<HTMLElement>(".comp-tab");
-    if (tab) { const r = hero.getBoundingClientRect(); tab.style.left = r.left + r.width / 2 + "px"; }
   }
 }
 watch(placement, () => nextTick(measureHero), { deep: true, immediate: true });

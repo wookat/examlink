@@ -22,15 +22,15 @@ export interface DispState {
   fsM: number | null;
   heroPos: "left" | "right";  // giant letter side
   deckDir: "stack" | "top" | "left" | "right"; // where the hero sits vs the history rail
-  compHide: boolean;          // composer collapsed to tab
+  compMode: "pin" | "float";  // composer bar: always pinned vs auto-hover float
   dotOpen: boolean;           // dot panel open (session-only)
 }
 
 const DEFAULTS: DispState = {
-  v: 3, align: "center", cw: 80, contrast: "std", latestOnly: false,
+  v: 4, align: "center", cw: 80, contrast: "std", latestOnly: false,
   gaze: "", dot: false, wake: true, fold: true, index: true,
   fsH: null, fsT: null, fsA: null, fsM: null,
-  heroPos: "right", deckDir: "stack", compHide: true, dotOpen: false,
+  heroPos: "right", deckDir: "stack", compMode: "float", dotOpen: false,
 };
 
 const GAZE_PRESETS: Record<string, { align: DispState["align"]; cw: number; latestOnly?: boolean; font?: number }> = {
@@ -49,7 +49,12 @@ export const useDispStore = defineStore("disp", {
       const saved = JSON.parse(localStorage.getItem(DISP_KEY) || "{}");
       Object.assign(s, saved);
       if ((saved.v || 0) < 2) { s.index = true; s.v = 2; }   // deck layout is the default
-      if ((saved.v || 0) < 3) { s.compHide = true; s.v = 3; } // composer starts folded
+      if ((saved.v || 0) < 3) { s.compMode = "float"; }
+      if ((saved.v || 0) < 4) {
+        s.compMode = (saved as any).compHide === false ? "pin" : "float";
+        s.v = 4;
+      }
+      delete (s as any).compHide;
     } catch {}
     s.dotOpen = false;
     return {

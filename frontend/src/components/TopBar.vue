@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, ref } from "vue";
-import { Eye, Maximize, Minimize, Settings, AlignLeft, AlignCenter, AlignRight } from "@lucide/vue";
+import { Eye, Maximize, Minimize, Settings, AlignLeft, AlignCenter, AlignRight, Pin, PinOff } from "@lucide/vue";
 import { useSessionStore } from "../stores/session";
 import { useDispStore } from "../stores/disp";
 import { useUiStore } from "../stores/ui";
@@ -20,6 +20,11 @@ const alignIcon = computed(() =>
 function cycleAlign() {
   const i = ALIGN_CYCLE.indexOf(disp.align);
   disp.patch({ align: ALIGN_CYCLE[(i + 1) % 3] as any, gaze: "" });
+}
+
+// composer bar: pinned vs auto-hover floating
+function toggleComp() {
+  disp.patch({ compMode: disp.compMode === "pin" ? "float" : "pin", compPeeked: false } as any);
 }
 
 // fullscreen
@@ -59,6 +64,11 @@ onUnmounted(() => ["fullscreenchange", "webkitfullscreenchange"].forEach(ev => d
       <button class="icon-btn align-ctl" :title="`内容位置：${ALIGN_LABEL[disp.align]}（点击切换）`"
               :aria-label="'内容位置：' + ALIGN_LABEL[disp.align]" @click="cycleAlign">
         <component :is="alignIcon" :size="18" />
+      </button>
+      <button class="icon-btn" :class="{ 'is-on': disp.compMode === 'pin' }"
+              :title="disp.compMode === 'pin' ? '操作栏：固定显示（点击改为自动悬浮）' : '操作栏：自动悬浮（鼠标移到底部弹出，点击固定）'"
+              :aria-label="'操作栏模式：' + (disp.compMode === 'pin' ? '固定' : '自动悬浮')" @click="toggleComp">
+        <Pin v-if="disp.compMode === 'pin'" :size="18" /><PinOff v-else :size="18" />
       </button>
       <div class="fontctl" title="字体大小">
         <button class="fc-btn" aria-label="减小字号" @click="disp.setFont(disp.fontPx - 2)">A−</button>
