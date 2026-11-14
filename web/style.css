@@ -3,6 +3,14 @@
    Modern dark UI · answer-first · distance-readable · responsive
    ============================================================ */
 
+/* Inter (latin subset, vendored) — CJK falls through to system fonts */
+@font-face { font-family: "Inter"; font-style: normal; font-weight: 400;
+  font-display: swap; src: url("/vendor/inter-latin-400.woff2") format("woff2"); }
+@font-face { font-family: "Inter"; font-style: normal; font-weight: 600;
+  font-display: swap; src: url("/vendor/inter-latin-600.woff2") format("woff2"); }
+@font-face { font-family: "Inter"; font-style: normal; font-weight: 800;
+  font-display: swap; src: url("/vendor/inter-latin-800.woff2") format("woff2"); }
+
 :root {
   /* color tokens — neutral zinc dark (shadcn-style), not generic AI-blue */
   --bg: #09090b;
@@ -35,7 +43,7 @@
 
   /* type */
   --fs: 20px;
-  --font: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC",
+  --font: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC",
           "Hiragino Sans GB", "Microsoft YaHei", sans-serif;
   --mono: "SF Mono", "Cascadia Code", Consolas, monospace;
 
@@ -193,7 +201,9 @@ body.latest-only .feed > .ans:not(:last-child) { display: none; }
   gap: 3px 10px; margin-bottom: 9px; font-size: var(--fs-m, 12px);
 }
 .tag {
-  font-size: 1em; font-weight: 600; color: var(--accent);
+  font-size: .85em; font-weight: 600; color: var(--accent);
+  background: color-mix(in srgb, currentColor 12%, transparent);
+  padding: 1.5px 8px; border-radius: var(--radius); letter-spacing: .02em;
   white-space: nowrap; flex: 0 0 auto;
 }
 .tag.auto { color: var(--ok); }
@@ -203,16 +213,19 @@ body.latest-only .feed > .ans:not(:last-child) { display: none; }
 .ans-time { font-size: .92em; color: var(--faint); margin-left: auto; flex: 0 0 auto; font-variant-numeric: tabular-nums; }
 
 .qchip {
-  font-size: 1em; font-weight: 700; color: var(--text);
+  font-family: var(--mono); font-size: .85em; font-weight: 600;
+  color: var(--accent); background: var(--accent-soft);
+  border: 1px solid rgba(129, 140, 248, .28);
+  padding: 1.5px 8px; border-radius: var(--radius); letter-spacing: .02em;
   white-space: nowrap; flex: 0 0 auto;
 }
-.qchip::after { content: "·"; color: var(--faint); margin-left: 10px; font-weight: 400; }
 .ans-ans {
-  font-size: 1em; font-weight: 700; color: var(--ok);
+  font-size: .92em; font-weight: 700; color: var(--ok);
+  background: var(--ok-soft); border: 1px solid rgba(52, 211, 153, .25);
+  padding: 1.5px 9px; border-radius: var(--radius);
   white-space: nowrap; flex: 0 1 auto; min-width: 0;
   overflow: hidden; text-overflow: ellipsis;
 }
-.ans-ans::before { content: "·"; color: var(--faint); margin-right: 10px; font-weight: 400; }
 
 /* question title — primary info alongside the answer, stays prominent */
 .ans-sub {
@@ -223,9 +236,10 @@ body.latest-only .feed > .ans:not(:last-child) { display: none; }
 }
 
 /* dual-model verify chip */
-.verify-chip { font-size: 1em; font-weight: 600; white-space: nowrap; flex: 0 1 auto;
-  min-width: 0; overflow: hidden; text-overflow: ellipsis; }
-.verify-chip::before { content: "·"; color: var(--faint); margin-right: 10px; font-weight: 400; }
+.verify-chip { font-size: .85em; font-weight: 600; white-space: nowrap; flex: 0 1 auto;
+  min-width: 0; overflow: hidden; text-overflow: ellipsis;
+  background: color-mix(in srgb, currentColor 12%, transparent);
+  padding: 1.5px 8px; border-radius: var(--radius); }
 .verify-chip.ok { color: var(--faint); }
 .verify-chip.diff { color: var(--danger); }
 
@@ -233,7 +247,6 @@ body.latest-only .feed > .ans:not(:last-child) { display: none; }
 .ans-status {
   font-size: 1em; color: var(--accent); white-space: nowrap; flex: 0 0 auto;
 }
-.ans-status:not(:empty)::before { content: "·"; color: var(--faint); margin-right: 10px; }
 .ans-status:not(:empty)::after {
   content: ""; display: inline-block; width: 3px; margin-left: 2px;
   animation: blink 1s steps(2) infinite;
@@ -293,6 +306,14 @@ body.idx-mode:not(.dot-open) .ans {
   margin: 0; transform: translateX(-50%);
   transition: top .3s ease, width .3s ease, opacity .24s ease, transform .3s ease;
 }
+/* entrance anims that keep the -50% centering (cardIn would break it) */
+@keyframes deckIn { from { opacity: 0; } }
+@keyframes heroIn {
+  from { opacity: 0; transform: translateX(-50%) translateY(18px); }
+  to   { opacity: 1; transform: translateX(-50%) translateY(0); }
+}
+body.idx-mode:not(.dot-open) .ans { animation: deckIn .3s ease; }
+body.idx-mode:not(.dot-open) .ans.cur-q { animation: heroIn .34s cubic-bezier(.2,.8,.25,1); }
 /* peeking strips: top edge stepped by depth, hero covers all but ~16px */
 body.idx-mode:not(.dot-open) .ans:not(.cur-q) {
   top: calc((6 - var(--d, 0)) * 16px);
