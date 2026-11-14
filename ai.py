@@ -81,14 +81,20 @@ SCENES = {
 KB_CAP = 100_000  # chars injected into system prompt at most
 
 
+FORMAT_RULE = ("输出排版要求：公式、单位、变量一律用纯文本或 Unicode 数学符号表达"
+               "（如 S=x−y、x²、a⁄b、√n、×、÷、≤、≥、≈、π、∑），"
+               "禁止使用 LaTeX/TeX 语法（\\[、$、\\frac、\\times 等），"
+               "因为客户端没有 LaTeX 渲染器。")
+
+
 def with_kb(system_prompt, kb_text):
-    """Append knowledge-base section to system prompt. Empty kb -> unchanged."""
+    """Append format rule + knowledge-base section to system prompt."""
     kb = (kb_text or "").strip()
     if not kb:
-        return system_prompt
+        return system_prompt + "\n\n" + FORMAT_RULE
     if len(kb) > KB_CAP:
         kb = kb[:KB_CAP] + "\n…（知识库过长，已截断）"
-    return (system_prompt +
+    return (system_prompt + "\n\n" + FORMAT_RULE +
             "\n\n【专属知识库】\n" + kb +
             "\n【知识库使用要求】作答时优先依据知识库内容；题目与知识库明确相关时直接采用其结论。"
             "知识库未覆盖的题目按正常分析作答，不要编造知识库来源。")
