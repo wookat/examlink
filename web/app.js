@@ -157,7 +157,7 @@ syncFsIcon();
 
 // ---------------- display prefs (gaze / align / contrast / latest) ----------------
 const DISP_KEY = "examlink.disp";
-let DISP = { align: "center", cw: 80, contrast: "std", latestOnly: false, gaze: "", dot: false, wake: true, fold: true, index: false, fsH: null, fsT: null, fsA: null, fsM: null };
+let DISP = { align: "center", cw: 80, contrast: "std", latestOnly: false, gaze: "", dot: false, wake: true, fold: true, index: false, fsH: null, fsT: null, fsA: null, fsM: null, heroPos: "right", compHide: false };
 try { Object.assign(DISP, JSON.parse(localStorage.getItem(DISP_KEY) || "{}")); } catch {}
 
 const GAZE_PRESETS = {
@@ -171,6 +171,8 @@ function saveDisp() { localStorage.setItem(DISP_KEY, JSON.stringify(DISP)); }
 function applyDisp() {
   document.body.dataset.align = DISP.align;
   document.body.dataset.contrast = DISP.contrast;
+  document.body.dataset.hero = DISP.heroPos || "right";
+  document.body.classList.toggle("comp-hide", !!DISP.compHide);
   document.body.classList.toggle("latest-only", !!DISP.latestOnly);
   document.body.classList.toggle("idx-mode", !!DISP.index);
   if (DISP.index) markCurGroup();
@@ -190,6 +192,8 @@ function applyDisp() {
   if ($("#wakeSw")) $("#wakeSw").checked = !!DISP.wake;
   if ($("#foldSw")) $("#foldSw").checked = !!DISP.fold;
   if ($("#indexSw")) $("#indexSw").checked = !!DISP.index;
+  document.querySelectorAll("#heroSeg .seg-btn").forEach(b =>
+    b.classList.toggle("active", b.dataset.hero === DISP.heroPos));
   // per-section font sizes; null = derived from the master --fs slider
   const vl = $("#view-live").style;
   const autoFs = { fsH: Math.round(fontPx * 1.45), fsT: 14, fsA: fontPx, fsM: 12 };
@@ -215,6 +219,9 @@ function setGaze(g) {
 document.querySelectorAll("#gazeSeg .seg-btn").forEach(b => b.onclick = () => setGaze(b.dataset.gaze));
 document.querySelectorAll("#alignSeg .seg-btn").forEach(b => b.onclick = () => {
   DISP.align = b.dataset.align; DISP.gaze = ""; applyDisp(); saveDisp();
+});
+document.querySelectorAll("#heroSeg .seg-btn").forEach(b => b.onclick = () => {
+  DISP.heroPos = b.dataset.hero; applyDisp(); saveDisp();
 });
 $("#widthRange")?.addEventListener("input", e => {
   DISP.cw = parseInt(e.target.value, 10); DISP.gaze = ""; applyDisp(); saveDisp();
@@ -246,14 +253,17 @@ $("#indexSw")?.addEventListener("change", e => {
 
 /* column width drag handle on the inner edge of the content column */
 const wdrag = $("#wdrag");
+const compTab = $("#compTab");
 function placeWdrag() {
   if (!wdrag) return;
-  const col = document.querySelector("#answers .ans") || document.querySelector(".composer .quick-row");
+  const col = document.querySelector("#answers .ans") || document.querySelector(".composer .composer-box");
   const hide = view !== "live" || DISP.dot || !col || window.innerWidth < 700;
   wdrag.classList.toggle("hidden", hide);
-  if (hide) return;
-  const r = col.getBoundingClientRect();
-  wdrag.style.left = ((DISP.align === "left" ? r.right : r.left) - 7) + "px";
+  if (!hide) {
+    const r = col.getBoundingClientRect();
+    wdrag.style.left = ((DISP.align === "left" ? r.right : r.left) - 7) + "px";
+    if (compTab) compTab.style.left = (r.left + r.width / 2) + "px";
+  }
 }
 wdrag?.addEventListener("pointerdown", e => {
   e.preventDefault();
@@ -275,6 +285,33 @@ wdrag?.addEventListener("pointerdown", e => {
   };
   window.addEventListener("pointermove", move);
   window.addEventListener("pointerup", up);
+});
+
+/* floating composer: fold button collapses it to a bottom tab;
+   while collapsed, moving the mouse into the bottom strip peeks it back out */
+let compPeeked = false, compPeekTimer = null;
+$("#compFold")?.addEventListener("click", () => {
+  DISP.compHide = true; compPeeked = false; clearTimeout(compPeekTimer); applyDisp(); saveDisp();
+});
+compTab?.addEventListener("click", () => {
+  DISP.compHide = false; compPeeked = false; clearTimeout(compPeekTimer); applyDisp(); saveDisp();
+});
+document.addEventListener("mousemove", e => {
+  if (!document.body.classList.contains("comp-hide")) return;
+  if (e.clientY > window.innerHeight - 64) {
+    document.body.classList.remove("comp-hide");
+    compPeeked = true;
+  }
+});
+document.addEventListener("mousemove", e => {
+  if (!compPeeked || document.body.classList.contains("comp-hide")) return;
+  if (e.clientY < window.innerHeight - 180) {
+    clearTimeout(compPeekTimer);
+    compPeekTimer = setTimeout(() => {
+      compPeeked = false;
+      if (DISP.compHide) document.body.classList.add("comp-hide");
+    }, 1600);
+  }
 });
 
 /* index mode: only the current (latest) question group shows full cards;
@@ -530,7 +567,7 @@ function updateQChips() {
     const q = c.dataset.qnum;
     if (q && !seen.has(q)) {
       seen.add(q);
-      chip.textContent = "第 " + q + " 题";
+      chip.textContent = "第 " + (c.dataset.qno || q) + " 题";
       chip.classList.remove("hidden");
     } else chip.classList.add("hidden");
   });
@@ -554,10 +591,17 @@ function setAnsChipFromText(el, text) {
       .join("\n");
     bodyMd.innerHTML = md(stripped);
   }
-  // Cluely-style layering: big answer first, reasoning folded behind a toggle
-  let hero = el.querySelector(".ans-hero");
-  if (!hero) {
-    hero = document.createElement("div"); hero.className = "ans-hero";
+  /* current-question card row: [题号+关键词+截图] on one side, giant
+     option letter on the other — side flippable via DISP.heroPos */
+  let row = el.querySelector(".qrow");
+  if (!row) {
+    row = document.createElement("div"); row.className = "qrow";
+    row.innerHTML = `<div class="qinfo"></div><div class="qbig"><span class="ql"></span><span class="qr"></span></div>`;
+    const info = row.querySelector(".qinfo");
+    const sub = el.querySelector(".ans-sub");
+    if (sub) info.appendChild(sub);
+    const thumb = el.querySelector(".shot-thumb");
+    if (thumb) info.appendChild(thumb);
     const tog = document.createElement("button");
     tog.className = "detail-toggle"; tog.textContent = "解析 ▾";
     const flip = () => {
@@ -565,15 +609,17 @@ function setAnsChipFromText(el, text) {
       tog.textContent = open ? "收起解析 ▴" : "解析 ▾";
     };
     tog.onclick = flip;
-    hero.onclick = flip;   // tapping the big answer also unfolds reasoning
-    const sub = el.querySelector(".ans-sub");
-    if (sub) sub.onclick = flip;
-    el.insertBefore(hero, el.querySelector(".md"));
+    row.addEventListener("click", e => { if (!e.target.closest(".shot-thumb")) flip(); });
+    el.insertBefore(row, el.querySelector(".md"));
     el.insertBefore(tog, el.querySelector(".md"));
     el.classList.add("has-hero");
     if (!DISP.fold) flip();   // user pref: reasoning expanded by default
   }
-  hero.textContent = ans;
+  const big = row.querySelector(".qbig");
+  const lm = ans.match(/^([A-FＡ-Ｆ]{1,6})\s*(.*)$/);
+  big.classList.toggle("text-ans", !lm);
+  big.querySelector(".ql").textContent = lm ? lm[1] : ans;
+  big.querySelector(".qr").textContent = lm ? lm[2] : "";
 }
 function cardById(id) {
   const el = document.getElementById("card-" + id);
@@ -592,6 +638,9 @@ function setCardTitle(el, text) {
     l.replace(/^[#>*\-\s]+/, "").replace(/\*\*/g, "").trim()).filter(Boolean);
   const title = lines.find(l => !/^答案[:：]/.test(l));
   if (!title) return;
+  // question number comes from the exam paper itself ("8. 审计某企业时…")
+  const qm = title.match(/^(?:第\s*)?(\d{1,3})\s*[.、．)）\s题]/);
+  if (qm) { el.dataset.qno = qm[1]; updateQChips(); }
   let sub = el.querySelector(".ans-sub");
   if (!sub) {
     sub = document.createElement("div"); sub.className = "ans-sub";

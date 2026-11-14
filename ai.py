@@ -81,7 +81,9 @@ SCENES = {
 KB_CAP = 100_000  # chars injected into system prompt at most
 
 
-FORMAT_RULE = ("输出排版要求：公式、单位、变量一律用纯文本或 Unicode 数学符号表达"
+FORMAT_RULE = ("输出排版要求：第一行直接输出题目自带的题号和题干关键词"
+               "（如“8. 审计某企业时，发现该企业…”），沿用试卷原编号，不要自编题号；"
+               "公式、单位、变量一律用纯文本或 Unicode 数学符号表达"
                "（如 S=x−y、x²、a⁄b、√n、×、÷、≤、≥、≈、π、∑），"
                "禁止使用 LaTeX/TeX 语法（\\[、$、\\frac、\\times 等），"
                "因为客户端没有 LaTeX 渲染器。")

@@ -161,15 +161,12 @@ img { max-width: 100%; }
 .feed > :first-child { margin-top: auto; }
 
 /* content column position — gaze/align control */
-.feed > *, .composer .quick-row, .composer .ask-row {
+.feed > *, .composer .composer-box {
   max-width: min(var(--cw), 1100px); width: 100%;
 }
-body[data-align="center"] .feed > *, body[data-align="center"] .composer .quick-row,
-body[data-align="center"] .composer .ask-row { margin-inline: auto; }
-body[data-align="left"] .feed > *, body[data-align="left"] .composer .quick-row,
-body[data-align="left"] .composer .ask-row { margin-right: auto; }
-body[data-align="right"] .feed > *, body[data-align="right"] .composer .quick-row,
-body[data-align="right"] .composer .ask-row { margin-left: auto; }
+body[data-align="center"] .feed > *, body[data-align="center"] .composer .composer-box { margin-inline: auto; }
+body[data-align="left"] .feed > *, body[data-align="left"] .composer .composer-box { margin-right: auto; }
+body[data-align="right"] .feed > *, body[data-align="right"] .composer .composer-box { margin-left: auto; }
 
 /* latest-answer-only (distance viewing) */
 body.latest-only .feed > .ans:not(:last-child) { display: none; }
@@ -242,11 +239,29 @@ body.latest-only .feed > .ans:not(:last-child) { display: none; }
 }
 @keyframes blink { 50% { opacity: 0; } }
 
-/* glanceable answer hero + folded reasoning (Cluely layering) */
-.ans-hero {
-  font-size: var(--fs-h, calc(var(--fs) * 1.45)); font-weight: 700; line-height: 1.3;
-  letter-spacing: .01em; color: #fff; padding: 6px 0 2px;
-  word-break: break-word;
+/* current-question card row: keywords+thumb one side, giant letter the other.
+   default letter-on-right per sketch; body[data-hero="left"] flips it. */
+.qrow {
+  display: flex; align-items: center; gap: 16px;
+  cursor: pointer; padding: 4px 0 2px;
+}
+body[data-hero="left"] .qrow { flex-direction: row-reverse; }
+.qinfo { flex: 1 1 auto; min-width: 0; }
+.qinfo .ans-sub { margin: 0 0 6px; }
+.qinfo .shot-thumb { display: block; margin-top: 6px; }
+.qbig {
+  flex: 0 0 auto; min-width: 1.4em; text-align: center; line-height: 1;
+  color: var(--ok); font-weight: 800; letter-spacing: .01em;
+  display: flex; flex-direction: column; align-items: center; gap: 2px;
+}
+.qbig .ql { font-size: var(--fs-h, calc(var(--fs) * 1.45)); }
+.qbig .qr {
+  font-size: calc(var(--fs-h, var(--fs)) * .28); font-weight: 600;
+  color: var(--text); max-width: 9em; overflow-wrap: anywhere; line-height: 1.3;
+}
+.qbig.text-ans .ql {
+  font-size: calc(var(--fs-h, var(--fs)) * .5); font-weight: 700;
+  max-width: 10em; overflow-wrap: anywhere; line-height: 1.25;
 }
 .detail-toggle {
   display: block; margin-top: 6px; padding: 4px 0; background: none; border: 0;
@@ -254,16 +269,18 @@ body.latest-only .feed > .ans:not(:last-child) { display: none; }
 }
 .detail-toggle:hover { color: var(--text); }
 .ans.has-hero:not(.detail-open) .md { display: none; }
-.ans.has-hero.detail-open .ans-hero { font-size: calc(var(--fs-h, var(--fs)) * .68); color: var(--ok); }
-.ans-hero { cursor: pointer; }
+.ans.has-hero.detail-open .qbig .ql { font-size: calc(var(--fs-h, var(--fs)) * .6); }
 
-/* index mode: past groups collapse to one-line answer index */
-body.idx-mode .ans:not(.cur-q):not(.force-open) { padding: 8px 12px; cursor: pointer; }
+/* index mode: past groups collapse to a compact row — meta left, letter right */
+body.idx-mode .ans:not(.cur-q):not(.force-open) { padding: 8px 14px; cursor: pointer; }
 body.idx-mode .ans:not(.cur-q):not(.force-open) .ans-sub,
-body.idx-mode .ans:not(.cur-q):not(.force-open) .ans-hero,
+body.idx-mode .ans:not(.cur-q):not(.force-open) .ans-ans,
 body.idx-mode .ans:not(.cur-q):not(.force-open) .detail-toggle,
 body.idx-mode .ans:not(.cur-q):not(.force-open) .md,
 body.idx-mode .ans:not(.cur-q):not(.force-open) .shot-thumb { display: none; }
+body.idx-mode .ans:not(.cur-q):not(.force-open) .qrow { padding: 0; }
+body.idx-mode .ans:not(.cur-q):not(.force-open) .qbig .ql { font-size: calc(var(--fs-h, var(--fs)) * .55); }
+body.idx-mode .ans:not(.cur-q):not(.force-open) .qbig .qr { display: none; }
 body.idx-mode .ans:not(.cur-q):not(.force-open) .ans-head { margin-bottom: 0; }
 body.idx-mode .ans.cur-q { border-color: var(--accent); }
 .copy-btn {
@@ -341,12 +358,40 @@ body.idx-mode .ans.cur-q { border-color: var(--accent); }
 @media (max-width: 700px) { .wdrag { display: none !important; } }
 body.dot-mode .wdrag { display: none; }
 
-/* ---------- composer ---------- */
+/* ---------- composer: floating card, collapsible to a bottom tab ---------- */
 .composer {
   position: sticky; bottom: 0; z-index: 40;
-  padding: 12px var(--pad) calc(12px + env(safe-area-inset-bottom));
-  background: var(--bg); border-top: 1px solid var(--border);
+  padding: 0 var(--pad) calc(10px + env(safe-area-inset-bottom));
+  pointer-events: none;
 }
+.composer-box {
+  pointer-events: auto; position: relative;
+  background: var(--card-solid); border: 1px solid var(--border-strong);
+  border-radius: var(--radius); padding: 10px 12px;
+  box-shadow: 0 -4px 22px rgba(0,0,0,.4);
+  transition: transform .25s ease, opacity .25s ease;
+}
+body.comp-hide .composer { height: 0; padding: 0; overflow: visible; }
+body.comp-hide .composer-box { transform: translateY(130%); opacity: 0; pointer-events: none; }
+.comp-fold {
+  position: absolute; top: -11px; right: 14px; z-index: 1;
+  width: 34px; height: 22px; padding: 0;
+  border: 1px solid var(--border-strong); border-radius: var(--radius-s);
+  background: var(--card-solid); color: var(--faint); font-size: 13px; line-height: 1;
+  cursor: pointer;
+}
+.comp-fold:hover { color: var(--text); }
+.comp-tab {
+  display: none;
+  position: fixed; bottom: 0; left: 50%; transform: translateX(-50%); z-index: 41;
+  padding: 5px 22px calc(5px + env(safe-area-inset-bottom, 0px));
+  border: 1px solid var(--border-strong); border-bottom: 0;
+  border-radius: 8px 8px 0 0; background: var(--card-solid);
+  color: var(--faint); font-size: 12px; font-family: inherit; cursor: pointer;
+}
+.comp-tab:hover { color: var(--text); }
+body.comp-hide .comp-tab { display: block; }
+body.dot-mode .comp-tab { display: none !important; }
 .quick-row { display: flex; gap: 10px; margin-bottom: 10px; }
 .qbtn {
   flex: 1; min-height: 46px; padding: 11px 12px;
