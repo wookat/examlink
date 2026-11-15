@@ -1,6 +1,16 @@
-# examlink · 线上笔试练习助手
+<div align="center">
+  <img src="docs/assets/logo.svg" width="96" alt="examlink logo" />
+  <h1>examlink · 线上笔试练习助手</h1>
+  <p><b>双设备协同的智能题目解析与学习复盘工具</b></p>
+  <p>
+    <img alt="License" src="https://img.shields.io/badge/license-MIT-blue.svg" />
+    <img alt="Platform" src="https://img.shields.io/badge/platform-Windows-0078d4.svg" />
+    <img alt="Backend" src="https://img.shields.io/badge/backend-Python%20%2B%20FastAPI-3776ab.svg" />
+    <img alt="Frontend" src="https://img.shields.io/badge/frontend-Vue%203%20%2B%20TS-42b883.svg" />
+  </p>
+</div>
 
-双设备协同的智能题目解析与学习复盘工具。支持截图和文本资料的智能识别、题目解析与学习建议，帮助你在**模拟练习及已获授权场景**中理解解题思路、高效复盘。
+支持截图和文本资料的智能识别、题目解析与学习建议，帮助你在**模拟练习及已获授权场景**中理解解题思路、高效复盘。
 
 主设备（电脑）运行本服务后，手机或另一台电脑通过局域网浏览器即可：实时查看练习画面、框选识别区域、触发题目识别、查看 AI 解析与知识点复盘——所有数据只留在你自己的设备上。
 
@@ -21,7 +31,53 @@
 - 已明确允许使用辅助工具的企业内训或测评场景
 - **请勿**在禁止外部辅助工具的考试、招聘笔试或测评中使用
 
+## 界面预览
+
+<table>
+  <tr>
+    <td><img src="docs/assets/shot-hero.png" alt="答题主界面：当前题居中，大字号答案令牌，左右露出相邻题" /></td>
+    <td><img src="docs/assets/shot-analysis.png" alt="展开解析：考点与推理过程" /></td>
+  </tr>
+  <tr>
+    <td align="center">答题主界面：大字号答案令牌 + 题卡轮播</td>
+    <td align="center">展开解析与考点复盘</td>
+  </tr>
+  <tr>
+    <td><img src="docs/assets/shot-settings.png" alt="设置页：画面识别、知识库、自动触发、显示偏好" /></td>
+    <td><img src="docs/assets/shot-mobile.png" alt="手机端界面" /></td>
+  </tr>
+  <tr>
+    <td align="center">设置页：识别 / 知识库 / 预设 / 显示偏好</td>
+    <td align="center">手机副屏</td>
+  </tr>
+</table>
+
 ## 工作原理
+
+```mermaid
+flowchart LR
+    subgraph A["主设备 (Windows)"]
+        S["屏幕采集<br/>DXGI / mss"]
+        D["画面差异识别<br/>基线差分 + 稳定判定"]
+        O["本地 OCR<br/>题号定位"]
+        K["knowledge.md<br/>知识库"]
+        AI["AI 解析<br/>OpenAI 兼容接口"]
+        S --> D --> O --> AI
+        K --> AI
+        AI --> K
+    end
+    subgraph B["副设备 (手机 / 另一台电脑)"]
+        W["浏览器 WebApp"]
+        V["实时预览 + 区域框选"]
+        C["答案卡轮播 + 追问 + 复盘"]
+        W --- V
+        W --- C
+    end
+    A <-->|"局域网 WebSocket + token"| B
+```
+
+<details>
+<summary>文字版架构图</summary>
 
 ```
 主设备（Windows）                     副设备（手机 / 另一台电脑）
@@ -31,6 +87,8 @@ examlink 服务  <────── 局域网 / WebSocket ──────>  
  ├─ OpenAI 兼容接口 → 解析与建议        ├─ 大字答案卡 / 逐题翻页 / 追问
  └─ knowledge.md 知识库               └─ 显示偏好（字号/对齐/对比度）
 ```
+
+</details>
 
 ### 三种 AI 接入方式
 
