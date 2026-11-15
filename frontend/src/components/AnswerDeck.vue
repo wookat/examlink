@@ -43,7 +43,7 @@ const caroSides = computed<CaroSide[]>(() => {
 
 /* stage width → pill offsets (hero width is shared with the CSS rule) */
 const stageW = ref(1280);
-const heroW = computed(() => Math.min(stageW.value * (stageW.value <= 900 ? 0.88 : 0.54), 640));
+const heroW = computed(() => Math.min(stageW.value * (stageW.value <= 900 ? 0.88 : 0.78), 1200));
 function sxOf(sd: number) {
   const x = heroW.value / 2 + 80 + (Math.abs(sd) - 1) * 150;
   const clamped = Math.min(x, stageW.value / 2 - 30);
