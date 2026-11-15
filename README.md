@@ -7,6 +7,7 @@
     <img alt="Platform" src="https://img.shields.io/badge/platform-Windows-0078d4.svg" />
     <img alt="Backend" src="https://img.shields.io/badge/backend-Python%20%2B%20FastAPI-3776ab.svg" />
     <img alt="Frontend" src="https://img.shields.io/badge/frontend-Vue%203%20%2B%20TS-42b883.svg" />
+    <a href="https://github.com/wookat/examlink/releases/latest"><img alt="Release" src="https://img.shields.io/github/v/release/wookat/examlink" /></a>
   </p>
 </div>
 
@@ -102,7 +103,7 @@ examlink 服务  <────── 局域网 / WebSocket ──────>  
 
 ### 方式一：直接运行（推荐体验）
 
-下载 Release 的 `examlink.exe`，双击即用，无需安装 Python。首次运行自动生成 `config.json`（含随机配对 token），控制台会打印配对链接。注意 **exe 需放在可写目录**（勿放 Program Files）。
+下载 [Release](https://github.com/wookat/examlink/releases/latest) 的 `examlink.exe`，双击即用，无需安装 Python。首次运行自动生成 `config.json`（含随机配对 token），控制台会打印配对链接。注意 **exe 需放在可写目录**（勿放 Program Files）。
 
 ### 方式二：源码运行
 
