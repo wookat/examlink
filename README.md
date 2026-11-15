@@ -1,103 +1,138 @@
-# examlink
+# examlink · 线上笔试练习助手
 
-局域网屏幕截图 + AI 答题服务。考试电脑上运行后，手机/另一台电脑浏览器扫码即可：实时预览、框选监控区域、手动截图、AI 多模态答题、像素差异自动触发。
+双设备协同的智能题目解析与学习复盘工具。支持截图和文本资料的智能识别、题目解析与学习建议，帮助你在**模拟练习及已获授权场景**中理解解题思路、高效复盘。
 
-## 架构
+主设备（电脑）运行本服务后，手机或另一台电脑通过局域网浏览器即可：实时查看练习画面、框选识别区域、触发题目识别、查看 AI 解析与知识点复盘——所有数据只留在你自己的设备上。
+
+> ⚖️ **合规使用提示**：请在使用前确认考试、招聘方或组织方允许使用辅助工具。本工具仅面向**个人模拟练习、题库训练、学习复盘及已明确授权**的测评场景。不得用于任何禁止外部辅助工具的考试、笔试、测评或竞赛；违反规则所产生的后果由使用者自行承担。
+
+## 核心功能
+
+- 🔗 **双设备协同**：主设备采集练习画面，副设备实时查看解析与学习建议，互不干扰
+- 🤖 **智能题目识别**：支持全屏/区域截图识别与文本识别；本地 OCR 自动定位题号，多模态大模型输出题目解析
+- 📚 **定制知识库**：`knowledge.md` 自建题库；命中过的题目优先秒回解析；可开启错题自增，持续积累个人复习资料
+- 🚀 **多种使用模式**：手动截图、像素差异自动识别、全局热键；另提供浏览器扩展，复用你已登录的 AI 网页（免 API Key）
+- 🛡️ **合规使用提醒**：内置使用提示，请遵守考试与组织方规则，仅在模拟练习或已获授权的场景中使用
+- ⭐ **全平台兼容**：副设备只需现代浏览器；服务自托管于局域网，API Key 与截图数据不出本地
+
+## 适用场景
+
+- 个人模拟练习、题库训练、错题整理与学习复盘
+- 已明确允许使用辅助工具的企业内训或测评场景
+- **请勿**在禁止外部辅助工具的考试、招聘笔试或测评中使用
+
+## 工作原理
 
 ```
-考试电脑                          手机/第二台电脑
-pythonw service.py  <──LAN/WS──>  浏览器打开网页
-  ├─ mss 截屏 + numpy ROI 像素差异    ├─ 实时画面预览
-  ├─ FastAPI + 单页 WebApp          ├─ 框选 ROI / 手动截图
-  └─ OpenAI 兼容代理(可选)            └─ AI 对话 / 历史 / 设置
+主设备（Windows）                     副设备（手机 / 另一台电脑）
+examlink 服务  <────── 局域网 / WebSocket ──────>  浏览器打开网页
+ ├─ DXGI/mss 屏幕采集 + 画面差异识别    ├─ 练习画面实时预览
+ ├─ 本地 OCR 题号定位                  ├─ 区域框选 / 手动触发识别
+ ├─ OpenAI 兼容接口 → 解析与建议        ├─ 大字答案卡 / 逐题翻页 / 追问
+ └─ knowledge.md 知识库               └─ 显示偏好（字号/对齐/对比度）
 ```
 
-两种 AI 模式：
-- **代理模式**：API Key 存在考试电脑 config.json，服务端转发模型请求（手机只收答案）
-- **直连模式**：API Key 只存在手机浏览器 localStorage，截图传到手机后由浏览器直接调模型——考试电脑完全不接触 Key
+### 三种 AI 接入方式
+
+| 方式 | 说明 |
+|---|---|
+| **代理模式** | API Key 存在主设备 `config.json`，由服务端调用模型，副设备只接收解析结果 |
+| **直连模式** | API Key 只存副设备浏览器，截图直达浏览器后由其直接调用模型——主设备完全不接触 Key |
+| **浏览器扩展** | `extension/` MV3 扩展：不调用 API，把截图+提示词投送到已登录的 AI 网页（ChatGPT/豆包/Gemini/DeepSeek/Kimi），回答回流大屏显示 |
 
 ## 快速开始
 
+### 方式一：直接运行（推荐体验）
+
+下载 Release 的 `examlink.exe`，双击即用，无需安装 Python。首次运行自动生成 `config.json`（含随机配对 token），控制台会打印配对链接。注意 **exe 需放在可写目录**（勿放 Program Files）。
+
+### 方式二：源码运行
+
 ```bash
 pip install -r requirements.txt
-python main.py           # 或 pythonw main.py (Windows 无窗口)
+python main.py            # 或 pythonw main.py（Windows 无窗口）
 ```
 
-手机连同一 Wi-Fi，浏览器打开终端打印的 `http://<IP>:8791/?t=<token>` 链接（或 `/api/qr.png` 二维码）。
+副设备连同一局域网，浏览器打开终端打印的 `http://<IP>:<port>/?t=<token>` 链接（或扫描 `/api/qr.png` 二维码）。
 
-## 打包分发（免 Python）
+### 三步开启练习复盘
 
-```bat
-build.bat                :: 产出 dist\examlink.exe，单文件约 41MB
-```
+1. **创建房间**：主设备启动服务，副设备浏览器打开配对链接，双端自动同步
+2. **智能识别**：在预览上框选题目区域；自动识别模式在画面变化稳定后触发识别，也可手动/热键触发
+3. **查看建议**：副设备大字显示题号与解析要点，展开「解析」查看完整推理与学习建议
 
-把 `dist\examlink.exe` 拷给任何 Windows 机器，双击即用，**无需安装 Python/依赖**。首次运行自动在 exe 旁生成 `config.json`（含随机 token），`knowledge.md`、`history.json` 同样写在 exe 旁边——**exe 必须放在可写目录**（不要放 Program Files）。web 资源和示例配置已打进包内。
+## 功能详情
 
-分发建议：只发 `examlink.exe` 一个文件即可；`config.example.json` 已在包内作为默认值模板，用户的一切配置都在网页设置页里改。
+- **自动识别**：监控区域内画面差异 + 静止判定，换题稳定后自动截图解析；阈值/稳定等待/冷却可调，长时间静止自动降频
+- **本地 OCR 题号**：识别"第 N 题 / N. / N/M"，卡片展示真实题号（RapidOCR，可关）
+- **知识库优先**：同一画面重复出现时直接命中历史解析（`kb_first`），零 AI 调用秒回
+- **答题场景**：通用 / 选择题 / 编程题 / 英语 / 填空简答，支持自定义提示词与场景档案
+- **追问**：同一会话内继续提问（代理模式由服务端保历史，直连模式由浏览器保历史）
+- **逐题导航**：横向卡片轮播，滚轮/触控板/侧键/‹› 按钮逐题切换；`nav` 事件支持远程翻页
+- **显示偏好**：字号无级调节（A−/A+）、内容对齐、宽度、高对比模式；大字号答案令牌远视可读
+- **全局热键**：主设备 pynput 监听（F 键/PrintScreen/鼠标中键/侧键/滚轮/组合键），动作含触发识别/仅截图/上下题/上下滚
+- **双模型校验**：第二档案对同一截图复核，一致标 ✓、分歧标备选答案
+- **错题自增**：`kb_auto_append` 开启后已解析 Q&A 自动去重追加进 `knowledge.md`
+- **极简点模式**：整页缩为悬浮圆点（未读角标），点开为侧边答题面板
+- **截图质量**：JPEG 质量与最大边长可调
+- **PWA**：manifest + service worker + 常亮（需 HTTPS/localhost，LAN http 下静默跳过）
+- **性能**：DXGI 采集后端（GPU 帧复制，画面静止时近零开销，自动回退 mss）；BGRA 直采指纹；预览复用监控帧
 
-## 浏览器扩展（extension/）— 免 API Key 模式
+## 配置（config.json）
 
-MV3 扩展，不调用任何 API：**直接把截图+提示词投送到你已登录的 AI 网页**（ChatGPT / 豆包 / Gemini / DeepSeek / Kimi），抓回的回答在侧边栏大屏显示。
-
-```
-考试电脑/第二电脑                  AI 网页标签页（你已登录）
-examlink 服务 (可选, 截图源)
-  └─ /api/frame.jpg ──> 扩展后台 ──> 内容脚本贴图+输字+提交 ──> 答案流回侧边栏
-```
-
-安装：`chrome://extensions` → 开发者模式 → 加载已解压的扩展程序 → 选 `extension/` 目录。点工具栏图标开侧边栏。
-
-- **截图来源**：examlink 服务（`/api/frame.jpg`，可只截 ROI）或 当前可见标签页
-- **站点自动化**：文件输入/drop/paste 三种贴图策略 + ProseMirror 兼容输入 + 发送 → MutationObserver 抓回答案流
-- **大屏显示**：答案卡片大字渲染，字号 14–40px 无级调节，可弹出独立窗口放第二屏
-- 站点选择器会随 AI 网页改版失效——失效时改 `content/inject.js` 里的 `ADAPTERS` 选择器表
-
-## 功能
-
-- **自动触发**：监控 ROI 区域像素差异，画面稳定后自动截图答题；可调灵敏度/稳定等待/冷却
-- **手动触发**：手机上"截屏答题""仅截图"按钮
-- **ROI 框选**：在实时预览上拖动画出监控区域，只监控/只截取该区域（省 token、防无关触发）
-- **多供应商**：OpenAI / 豆包 / 通义 / 智谱 / Kimi / Gemini / OpenRouter / Ollama / 自定义，均走 OpenAI 兼容接口
-- **答题场景**：通用 / 选择题 / 编程题 / 英语 / 填空简答
-- **追问**：同一会话内继续提问（代理模式由服务端保历史，直连模式由手机保历史）
-- **视线布局**：正视/左侧视/右侧视/远视预设——答案列贴到离你最近的屏幕边缘，远视=超大字只看最新答案；内容对齐+宽度+字号均可调；高对比黑底白字模式
-- **快捷键**：考试电脑全局热键（F 键/PrintScreen/鼠标中键/侧键X1X2/**滚轮**/组合键，pynput 全局监听），动作含截屏答题/仅截图/上下题/上下滚——滚轮翻页可直接控制第二屏；答题页可为本设备录制按键/鼠标键
-- **逐题导航**：答案卡片滚动吸附，方向键/PageUp/Down/侧键/浮动 ‹› 按钮逐题切换；WS `nav` 事件支持远程翻页
-- **高清截图**：jpeg 质量 60–100、最大边长 1200–4096 可调
-- **扫读分层**：答案自动提取为超大字 hero，推理折叠进「解析」；卡片头带题干标题与「作答中」状态
-- **极简点模式**：整页缩成悬浮圆点（带未读角标），点开为右 dock 答题面板，面板内含答题/截图/停止
-- **双模型校验**：选第二个档案对同一截图再答一遍，答案一致标 ✓、分歧标红备选答案
-- **错题本自增**：开启后答过的 Q&A 自动追加进 knowledge.md（去重、8 万字上限），下次优先命中
-- **PWA**：manifest + service worker + wake lock 常亮（后两者需 HTTPS/localhost，http LAN 下静默跳过）
-- **安全**：URL token 配对；默认绑定 0.0.0.0 仅供局域网使用
-
-## 配置 (config.json)
+首次运行自动生成；全部字段均可在网页设置页修改。
 
 | 字段 | 说明 |
 |---|---|
-| port | 服务端口，默认 8791 |
-| token | 配对 token，留空自动生成 |
-| monitor | 显示器编号（1=主） |
-| roi | 归一化监控区域 [x0,y0,x1,y1]，null=全屏 |
-| auto.* | enabled/poll_ms/stable_ms/cooldown_s/threshold/thumb_w/thumb_h |
-| proxy.* | 代理模式 provider/base_url/api_key/model |
-| ai_mode | proxy / direct |
-| scene | 默认答题场景 |
-| hotkey.items | 考试电脑全局热键 `[{action,trigger}]`：action=capture/snap/nav_next/nav_prev/nav_down/nav_up；trigger=`key:f9` / `mouse:middle` / `mouse:wheel_down` / `combo:ctrl+shift+q` … |
-| jpeg_quality / max_image_dim | 截图 JPEG 质量（默认 92）/ 最大边长（默认 3000） |
+| `port` / `token` | 服务端口（默认 8791）/ 配对 token（留空自动生成） |
+| `monitor` / `roi` | 显示器编号（1=主）/ 归一化监控区域 `[x0,y0,x1,y1]`，null=全屏 |
+| `capture_backend` | `auto`（DXGI 优先，失败回退 mss）/ `dxgi` / `mss` |
+| `auto.*` | `enabled` / `poll_ms` / `stable_ms` / `cooldown_s` / `change_ratio`（触发阈值，变化像素占比）/ `ocr_qnum` |
+| `ai_mode` / `proxy.*` | `proxy`/`direct`；provider/base_url/api_key/model |
+| `scene` / `scenes` / `custom_prompt` | 默认场景与自定义提示词 |
+| `kb_first` / `kb_auto_append` / `knowledge` | 命中秒回 / 错题自增 / 知识库文件 |
+| `verify_profile` / `fallback_profile` | 复核模型档案 / 失败回退档案 |
+| `hotkey.items` | 全局热键 `[{action,trigger}]` |
+| `jpeg_quality` / `max_image_dim` | 截图 JPEG 质量 / 最大边长 |
 
 ## HTTP API（供外部客户端/扩展使用）
 
 | 端点 | 说明 |
 |---|---|
-| `GET /api/state?token=` | 显示器/ROI/场景/提示词等状态 |
-| `GET /api/frame.jpg?token=[&roi=1]` | 单帧截图 JPEG（`roi=1` 按配置裁剪） |
-| `GET /preview.mjpg?token=` | MJPEG 实时预览流 |
+| `GET /api/state?token=` | 显示器/区域/场景/后端等状态 |
+| `GET /api/frame.jpg?token=[&roi=1]` | 单帧截图 JPEG |
+| `GET /preview.mjpg?token=` | 实时预览流（复用监控帧，无变化不重复编码） |
 | `GET /api/qr.png?token=` | 配对链接二维码 |
-| `WS /ws?token=` | 双向命令/事件通道（capture/ask/set/abort/clear/shutdown） |
+| `WS /ws?token=` | 命令/事件通道（capture/ask/set/nav/abort/clear/shutdown） |
 
-## 注意
+## 浏览器扩展（extension/）
 
-- 自动触发基于像素差异，整屏监控时系统时钟/通知也会触发——**强烈建议框选题目区域**
-- 直连模式依赖模型服务支持浏览器跨域（CORS）；不支持时用代理模式
-- 截图含屏幕内容，请只在可信局域网使用
+免 API Key 模式：`chrome://extensions` → 开发者模式 → 加载 `extension/` 目录 → 工具栏图标打开侧边栏。截图来源可选 examlink 服务或当前标签页；站点选择器失效时改 `content/inject.js` 的 `ADAPTERS` 表。
+
+## 构建
+
+```bat
+build.bat     :: PyInstaller 打包 → dist\examlink.exe
+```
+
+前端：`cd frontend && npm install && npm run build`（产物打进 exe）。官网演示站：`cd site && npm install && npm run dev`。
+
+## 注意事项
+
+- 自动识别基于画面差异，整屏监控时系统时钟/通知也可能触发——**建议框选题目区域**
+- 直连模式需要模型服务支持浏览器跨域（CORS），否则请用代理模式
+- 截图包含屏幕内容，服务仅供可信局域网使用；公网暴露前请先评估风险
+
+## 免责声明
+
+本软件仅作为学习与练习辅助工具，按"现状"提供，不附带任何明示或默示担保。使用者应：
+
+1. 在使用前自行确认所在考试、招聘、测评或竞赛的组织方规则允许使用此类辅助工具；
+2. 仅在个人模拟练习、题库训练、学习复盘或已获明确授权的场景中使用；
+3. 自行承担因违反相关规则、协议或法律法规所产生的一切后果。
+
+开发者不对任何因使用或 misuse 本软件导致的后果承担责任。下载、安装或使用本软件即表示你已阅读并同意上述条款。
+
+## License
+
+[MIT](LICENSE) © 2026 wookat

@@ -5,6 +5,7 @@
   "jpeg_quality": 80,
   "max_image_dim": 1600,
   "roi": null,
+  "capture_backend": "auto",
   "auto": {
     "enabled": false,
     "poll_ms": 900,
@@ -29,6 +30,7 @@
     "items": []
   },
   "kb_auto_append": false,
+  "kb_first": true,
   "verify_profile": "",
   "knowledge": "",
   "fallback_profile": ""
