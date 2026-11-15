@@ -538,22 +538,23 @@ body[data-deck="carousel"].idx-mode:not(.dot-open) .ans.q-hero {
 /* carousel hero internals: shot band → question → 18题C token → 解析 */
 body[data-deck="carousel"].idx-mode:not(.dot-open) .ans.caro-hero { text-align: center; }
 .ans.caro-hero .shot-band {
-  display: block; width: 100%; max-height: min(26vh, 200px); object-fit: cover;
+  display: block; width: 100%; max-height: 72px; object-fit: cover;
   border-radius: var(--radius); border: 1px solid var(--border);
-  margin: 2px 0 12px; cursor: zoom-in; opacity: .92;
+  margin: 2px 0 8px; cursor: zoom-in; opacity: .78;
 }
 .ans.caro-hero .shot-band:hover { opacity: 1; }
-.ans.caro-hero .ans-sub { -webkit-line-clamp: 3; margin: 0 0 6px; }
+.ans.caro-hero .ans-sub { -webkit-line-clamp: 2; margin: 0 0 4px; font-size: calc(var(--fs-t, 14px)); }
 .qatok {
-  display: flex; align-items: baseline; justify-content: center; gap: .38em;
-  padding: 8px 0 4px; line-height: 1; cursor: pointer; color: var(--ok);
+  display: flex; align-items: baseline; justify-content: center; gap: .3em;
+  padding: 4px 0 2px; line-height: 1; cursor: pointer; color: var(--ok);
 }
-.qatok .qt-n { font-size: calc(var(--fs-h, var(--fs)) * 1.15); font-weight: 800; color: var(--text); font-variant-numeric: tabular-nums; }
-.qatok .qt-t { font-size: calc(var(--fs-h, var(--fs)) * .36); font-weight: 600; color: var(--faint); }
-.qatok .qt-a { font-size: min(calc(var(--fs-h, var(--fs)) * 1.9), 13vw); font-weight: 800; letter-spacing: .01em; }
-.qatok .qt-r { font-size: calc(var(--fs-h, var(--fs)) * .34); font-weight: 600; color: var(--text); max-width: 12em; overflow-wrap: anywhere; line-height: 1.3; }
-.qatok.text-ans .qt-a { font-size: calc(var(--fs-h, var(--fs)) * .55); font-weight: 700; max-width: 14em; overflow-wrap: anywhere; line-height: 1.25; text-align: left; }
-.ans.caro-hero.detail-open .qatok .qt-a { font-size: min(calc(var(--fs-h, var(--fs)) * .75), 12vw); }
+.qatok .qt-n { font-size: calc(var(--fs-h, var(--fs)) * 2.6); font-weight: 800; color: var(--text); font-variant-numeric: tabular-nums; }
+.qatok .qt-t { font-size: calc(var(--fs-h, var(--fs)) * .55); font-weight: 600; color: var(--faint); }
+.qatok .qt-a { font-size: min(calc(var(--fs-h, var(--fs)) * 3.8), 24vw); font-weight: 800; letter-spacing: .01em; }
+.qatok .qt-r { font-size: calc(var(--fs-h, var(--fs)) * .6); font-weight: 600; color: var(--text); max-width: 12em; overflow-wrap: anywhere; line-height: 1.3; }
+.qatok.text-ans .qt-a { font-size: calc(var(--fs-h, var(--fs)) * .85); font-weight: 700; max-width: 14em; overflow-wrap: anywhere; line-height: 1.25; text-align: left; }
+.ans.caro-hero.detail-open .qatok .qt-a { font-size: min(calc(var(--fs-h, var(--fs)) * 2), 12vw); }
+.ans.caro-hero.detail-open .qatok .qt-n { font-size: calc(var(--fs-h, var(--fs)) * 1.4); }
 .ans.caro-hero .detail-toggle { margin-inline: auto; }
 /* content alignment pref still steers the hero's inner text */
 body[data-align="left"] .ans.caro-hero { text-align: left; }
@@ -582,7 +583,7 @@ body[data-align="right"] .ans.caro-hero .detail-toggle { margin-right: 0; }
 .shot-thumb:hover { opacity: 1; }
 
 /* analysis body — secondary info, deliberately dimmer than title/answer */
-.ans .md { font-size: var(--fs-a, var(--fs)); line-height: 1.7; word-break: break-word; color: var(--muted); }
+.ans .md { font-size: var(--fs-a, var(--fs)); line-height: 1.7; word-break: break-word; color: var(--muted); text-align: justify; text-justify: inter-ideograph; }
 .ans .md p { margin: 7px 0; }
 .ans .md p:first-child { margin-top: 0; }
 .ans .md strong, .ans .md b { color: #fff; font-weight: 700; }
